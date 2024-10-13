@@ -7,6 +7,29 @@ from tqdm import tqdm
 # Auxilary and Global supervisions from the paper for ASD-NET 😁🫦
 # As of now test1 be like, first extract features then think on it 
 # Afterwards don't forget to implement this -> first think on it then extraction then again think on it, commenting so that I won't forget ig😁
+class AudioEmbeddingModel(nn.Module):
+    def __init__(self, input_dim, embedding_dim):
+        super(AudioEmbeddingModel, self).__init__()
+        self.fc1 = nn.Linear(input_dim, 128)
+        self.fc2 = nn.Linear(126, 64)
+        self.fc3 = nn.Linear(62, 32)
+
+        self.cl1 = nn.Conv1d(1, 1, 3)
+        self.cl2 = nn.Conv1d(1, 1, 3)
+        self.cl3 = nn.Conv1d(1, 1, 3)
+
+        self.embedding = nn.Linear(30, embedding_dim)
+        
+    def forward(self, x):
+        x = torch.relu(self.fc1(x))
+        x = torch.relu(self.cl1(x))
+        x = torch.relu(self.fc2(x))
+        x = torch.relu(self.cl2(x))
+        x = torch.relu(self.fc3(x))
+        x = torch.relu(self.cl3(x))
+        x = self.embedding(x)
+        return x
+
 class SpeakSense(nn.Module):
 
     def __init__(self, dim_size, map_size, out_size):
