@@ -162,3 +162,4 @@ cython_debug/
 #.idea/
 
 video_model/src/data/dataset/GRID/video/
+speaksense/*
