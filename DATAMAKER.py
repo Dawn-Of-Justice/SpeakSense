@@ -132,28 +132,32 @@ class GroqGenerator:
 
 # Example usage
 if __name__ == "__main__":
-    # Initialize the generator
-    try:
-        generator = GroqGenerator(api_key="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")
-        response = generator.generate_response(
-            prompt="So generate a lot of examples like the above, in this format \n\"sample1: <text>\"\nNo need to mention if its direct or indirect, only the above format should be followed strictly",
-            system_message="You are an AI Agent who is assigned with the task to make text outputs to train a model for context awareness taskk, basically the model will be trained for classifying if the model got addressed or not, like it would be used with an AI powered robot mostly, like it will listen to everything and when it is addressed only it will detect him, and start responding,\n\nLike Example,\n\nDirect Addressal:\nSample1: Hey Robot, can you tell me about the weather today?\nSample2: Hey buddy, tell me a joke!\n\nIndirect Addressal:\nSample1: So today we are talking about AI in Romantic Relationship, so what do you think Alexa\nSample2: I’ve been thinking about this a lot… what do you think?\nSample3: So, this is where we’re at… what should be done next?\nSample4: So, this is where we’re at… what should be done next?\n\nNot only this, I need samples of which talks about a random topic and then use this indirect addressals and direct addressals\n\nDirect Addressal:\nSample1: So we’ve been discussing the best sci-fi movies of all time. Hey Robot, do you have a favorite?\nSample2: We’re talking about AI in education, and I wanted to ask you directly, Alexa, do you think AI tutors can replace human teachers?\nSample3: I was looking into how human languages evolve over time. Words change meaning, slang becomes standard, and even grammar rules shift. But what about AI? If we train you on new kinds of speech patterns, will you evolve in the same way? Robot, what’s your take—do you think AI language models will ever develop their own natural dialects?\n\nIndirect Addressal:\nSample1: I was reading about the Mars rover mission today. They found some interesting rock samples... what do you make of that?\nSample2: I read an article about the history of human language. It’s amazing how it evolved over time... would you say AI can ever truly grasp language like we do?\nSample3: I was reading about AI-generated music today, and it's fascinating. Some people say AI can never truly be creative because it lacks emotions, but others argue that creativity is just a pattern-based process, and AI can replicate that. I mean, if we can't really define creativity ourselves, how can we say AI isn’t capable of it? I wonder how you’d look at it… Would AI creativity ever be as valuable as human creativity?"
-        )
-        
-        if response:
-            # Save with some metadata
-            filepath = generator.save_response(
-                prompt="So generate a lot of examples like the above, in this format \n\"sample1: <text>\"\nNo need to mention if its direct or indirect, only the above format should be followed strictly",
-                response=response,
-                metadata={"category": "science"}
+    for i in range(332):
+        # Initialize the generator
+        try:
+            generator = GroqGenerator(api_key="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")
+            response = generator.generate_response(
+                # prompt="So generate a lot of examples like the above, in this format \n\"sample1: <text>\"\nNo need to mention if its direct or indirect, only the above format should be followed strictly",
+                # system_message="You are an AI Agent who is assigned with the task to make text outputs to train a model for context awareness task, basically the model will be trained for classifying if the model got addressed or not, like it would be used with an AI powered robot mostly, like it will listen to everything and when it is addressed only it will detect him, and start responding,\n\nLike Example,\n\nDirect Addressal:\nSample1: Hey Robot, can you tell me about the weather today?\nSample2: Hey buddy, tell me a joke!\n\nIndirect Addressal:\nSample1: So today we are talking about AI in Romantic Relationship, so what do you think Alexa\nSample2: I’ve been thinking about this a lot… what do you think?\nSample3: So, this is where we’re at… what should be done next?\nSample4: So, this is where we’re at… what should be done next?\n\nNot only this, I need samples of which talks about a random topic and then use this indirect addressals and direct addressals\n\nDirect Addressal:\nSample1: So we’ve been discussing the best sci-fi movies of all time. Hey Robot, do you have a favorite?\nSample2: We’re talking about AI in education, and I wanted to ask you directly, Alexa, do you think AI tutors can replace human teachers?\nSample3: I was looking into how human languages evolve over time. Words change meaning, slang becomes standard, and even grammar rules shift. But what about AI? If we train you on new kinds of speech patterns, will you evolve in the same way? Robot, what’s your take—do you think AI language models will ever develop their own natural dialects?\n\nIndirect Addressal:\nSample1: I was reading about the Mars rover mission today. They found some interesting rock samples... what do you make of that?\nSample2: I read an article about the history of human language. It’s amazing how it evolved over time... would you say AI can ever truly grasp language like we do?\nSample3: I was reading about AI-generated music today, and it's fascinating. Some people say AI can never truly be creative because it lacks emotions, but others argue that creativity is just a pattern-based process, and AI can replicate that. I mean, if we can't really define creativity ourselves, how can we say AI isn’t capable of it? I wonder how you’d look at it… Would AI creativity ever be as valuable as human creativity?"
+                prompt = "So generate a lot of examples like the above and try to make it different starting phrases, in this format \n\"Sample1: <text>\"\nNo need to mention if it's direct or indirect, only the above format should be followed strictly.",
+                system_message = "You are an AI Agent who is assigned with the task to make text outputs to train a model for context awareness. The model will be trained to classify different types of conversations. However, in this case, you must generate examples **without any direct or indirect addressal to an AI, robot, or virtual assistant**. The samples should be completely natural, covering a variety of topics such as technology, history, philosophy, science, and daily life. **Ensure that all examples sound like organic conversations between humans and do not involve AI in any way.**\n\nLike Example,\n\nSample1: I was reading about the Mars rover mission today. They found some interesting rock samples. The images they sent back look incredible!\nSample2: I read an article about the history of human language. It’s amazing how it evolved over time. I wonder if language is still changing at the same pace today.\nSample3: I was reading about AI-generated music today, and it's fascinating. Some people say AI can never truly be creative because it lacks emotions, but others argue that creativity is just a pattern-based process, and humans follow similar patterns.\nSample4: We were talking about space exploration, and someone mentioned how the Voyager probe is still sending data back. That’s just incredible.\nSample5: The other day, I was watching a documentary about deep-sea creatures. It’s amazing how little we know about life in the ocean compared to space.\nSample6: The Renaissance period was such a fascinating time in history. The level of art, science, and culture that flourished back then still influences us today.\nSample7: I read a study on how bilingual people process information differently. It seems like speaking multiple languages actually shapes the way we think.\nSample8: It’s interesting how some people believe time is just a human-made concept, while others argue that it's a fundamental part of the universe itself.\nSample9: There’s been a lot of debate about whether social media helps people connect or isolates them even more. It’s hard to say for sure.\nSample10: I recently started learning about quantum mechanics, and it’s blowing my mind. The idea that particles can exist in multiple states at once is hard to wrap my head around."
+
             )
             
-            # Split into training samples
-            samples = generator.split_for_training(filepath)
-            # print(f"\nGenerated {len(samples)} training samples for: {prompt}")
-            # print(f"First sample: {samples[0][:100]}...")
-            
-    except ValueError as e:
-        print(f"Error: {str(e)}")
-    except Exception as e:
-        print(f"Unexpected error: {str(e)}")
+            if response:
+                # Save with some metadata
+                filepath = generator.save_response(
+                    prompt="So generate a lot of examples like the above, in this format \n\"sample1: <text>\"\nNo need to mention if its direct or indirect, only the above format should be followed strictly",
+                    response=response,
+                    metadata={"category": "science"}
+                )
+                
+                # Split into training samples
+                samples = generator.split_for_training(filepath)
+                # print(f"\nGenerated {len(samples)} training samples for: {prompt}")
+                # print(f"First sample: {samples[0][:100]}...")
+                
+        except ValueError as e:
+            print(f"Error: {str(e)}")
+        except Exception as e:
+            print(f"Unexpected error: {str(e)}")
