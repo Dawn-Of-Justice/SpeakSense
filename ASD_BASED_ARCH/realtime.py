@@ -546,11 +546,11 @@ class RealtimeASD:
             
             # Draw box and score
             # Color coding: Green for speaking (2.6), Blue for looking (0.6), Red for not looking (-0.6)
-            if abs(score - 2.6) < 0.3:  # Speaking state
+            if abs(score - 2.6) < 0.5:  # Speaking state
                 color = (0, 255, 0)  # Green
                 status = "SPEAKING"
                 thickness = 3  # Thicker for speaking
-            elif abs(score - 0.6) < 0.3:  # Looking state
+            elif abs(score - 0.6) < 0.5:  # Looking state
                 color = (255, 0, 0)  # Blue (BGR format)
                 status = "LOOKING"
                 thickness = 2

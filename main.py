@@ -1,6 +1,7 @@
 import threading
 from Live_transcription.Transcription import WhisperRealtimeTranscriber
 from Live_transcription.Transcription2 import RealTimeTranscriber
+from ASD_BASED_ARCH.realtime import *
 import time
 
 def transcription():
@@ -33,11 +34,11 @@ def ASD():
         if len(s) >= 100:
             with open("transcription.txt", "w") as f:
                 f.write("")
-        
+                
 if __name__ == "__main__":
     transcription_thread = threading.Thread(target=transcription)
-    ASD_thread = threading.Thread(target=ASD)
-    
+    # ASD_thread = threading.Thread(target=ASD)
+    ASD_thread = threading.Thread(target=main)
     # Threads are getting started
     transcription_thread.start()
     ASD_thread.start()    
