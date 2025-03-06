@@ -120,6 +120,9 @@ class RealTimeTranscriber:
         # print(transcription, end = " -- ")
         # time.sleep(0.1)
         # print("-" * 50)
+        if transcription is not None:
+            with open("transcription.txt", "a") as f:
+                f.write(transcription+"->")
         
         # Reset buffer if silence detected
         if self.silence_counter >= self.max_silence_chunks:

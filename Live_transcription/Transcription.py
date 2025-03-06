@@ -127,6 +127,8 @@ class WhisperRealtimeTranscriber:
         print(transcription)
         print("-" * 50)
         print("Press Ctrl+C to stop")
+        with open("transcription.txt", "a") as f:
+            f.write(transcription+"->")
         
         # Reset buffer if significant silence detected
         if self.silence_counter >= self.max_silence_chunks:
