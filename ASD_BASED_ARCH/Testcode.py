@@ -1,28 +1,54 @@
-print("Hi")
-import sys, time, os, tqdm, torch, glob, subprocess, warnings, cv2, pickle, numpy, python_speech_features
-from scipy import signal
+import os
+import subprocess
 from shutil import rmtree
+import os
+import sys
+import time
+import pickle
+import glob
+import cv2
+import math
+import numpy as np
+from scipy import signal
 from scipy.io import wavfile
 from scipy.interpolate import interp1d
-from sklearn.metrics import accuracy_score, f1_score
-
+import tqdm
+import warnings
 from scenedetect.video_manager import VideoManager
 from scenedetect.scene_manager import SceneManager
 from scenedetect.frame_timecode import FrameTimecode
 from scenedetect.stats_manager import StatsManager
 from scenedetect.detectors import ContentDetector
 
+import sys, time, torch, glob, python_speech_features
+from scipy.io import wavfile
+from scipy.interpolate import interp1d
+from sklearn.metrics import accuracy_score, f1_score
+
 from model.faceDetector.s3fd import S3FD
 from ASD import ASD
-
 warnings.filterwarnings("ignore")
-print("hi")
-# Configuration class instead of command line arguments
-class Config:
+# C:\Users\Rohit Francis\Desktop\Codes\TESTINGS\Diarization Test\Light-ASD\model\faceDetector\s3fd\box_utils.py:104:
+#     UserWarning: An output with one or more elements was resized since it had shape [54], which does not match the required output shape [33]. 
+#     This behavior is deprecated, and in a future PyTorch release outputs will not be resized unless they have zero elements. You can explicitly reuse an out tensor t by resizing it,
+#     inplace, to zero elements with t.resize_(0). (Triggered internally at
+#                                                   C:\actions-runner\_work\pytorch\pytorch\builder\windows\pytorch\aten\src\ATen\native\Resize.cpp:35.)
+
+class SimpleConfig:
     def __init__(self):
         # Basic paths
-        self.videoName = "sample_video.mp4"  # Name of your input video file
-        self.videoFolder = "demo"  # Folder containing your input video
+        self.videoPath = None  # Will be set by user
+        self.savePath = None   # Will be set by user
+        
+        # Derived paths (will be set automatically)
+        self.pyaviPath = None
+        self.pyframesPath = None
+        self.videoFilePath = None
+        self.audioFilePath = None
+        self.pyworkPath = None
+        self.pycropPath = None
+        
+        # Model related paths
         self.pretrainModel = "weight/pretrain_AVA_CVPR.model"  # Path to pretrained model
         
         # Processing parameters
@@ -33,29 +59,11 @@ class Config:
         self.minFaceSize = 1
         self.cropScale = 0.40
         
+        self.videoFolder = r"C:\Users\Rohit Francis\Desktop\Codes\TESTINGS\Diarization Test\Light-ASD\VideoFolder"
+        
         # Video timing
         self.start = 0
         self.duration = 0  # 0 means process entire video
-        
-        # Derived paths
-        # self.savePath = os.path.join(self.videoFolder, self.videoName)
-        # self.videoPath = os.path.join(self.videoFolder, self.videoName + '.mp4')  # Assuming MP4 format
-        # self.pyaviPath = os.path.join(self.savePath, 'pyavi')
-        # self.pyframesPath = os.path.join(self.savePath, 'pyframes')
-        # self.pyworkPath = os.path.join(self.savePath, 'pywork')
-        # self.pycropPath = os.path.join(self.savePath, 'pycrop')
-        
-        self.savePath = r"C:\Users\Rohit Francis\Desktop\Codes\TESTINGS\Diarization Test\Light-ASD\results" 
-        self.videoPath = r"C:\Users\Rohit Francis\Desktop\Codes\TESTINGS\Diarization Test\Light-ASD\demo\sample_video.mp4"
-        self.pyaviPath = os.path.join(self.savePath, 'pyavi')
-        self.pyframesPath = os.path.join(self.savePath, 'pyframes')
-        self.pyworkPath = os.path.join(self.savePath, 'pywork')
-        self.pycropPath = os.path.join(self.savePath, 'pycrop')
-        
-        
-        # Additional paths set during processing
-        self.videoFilePath = None
-        self.audioFilePath = None
 
 # The rest of your functions remain the same, just change 'args' to 'config'
 def scene_detect(config):
@@ -76,12 +84,9 @@ def scene_detect(config):
         pickle.dump(sceneList, fil)
     return sceneList
 
-# Note: The other functions remain the same, just change 'args' to 'config'
-# ... (keeping all other functions as they are)
-
 def inference_video(config):
 	# GPU: Face detection, output is the list contains the face location and score in this frame
-	DET = S3FD(device='cuda')
+	DET = S3FD(device='cpu')
 	flist = glob.glob(os.path.join(config.pyframesPath, '*.jpg'))
 	flist.sort()
 	dets = []
@@ -113,6 +118,7 @@ def bb_intersection_over_union(boxA, boxB, evalCol = False):
 		iou = interArea / float(boxAArea + boxBArea - interArea)
 	return iou
 
+
 def track_shot(config, sceneFaces):
 	# CPU: Face tracking
 	iouThres  = 0.5     # Minimum IOU between consecutive face detections
@@ -135,15 +141,15 @@ def track_shot(config, sceneFaces):
 		if track == []:
 			break
 		elif len(track) > config.minTrack:
-			frameNum    = numpy.array([ f['frame'] for f in track ])
-			bboxes      = numpy.array([numpy.array(f['bbox']) for f in track])
-			frameI      = numpy.arange(frameNum[0],frameNum[-1]+1)
+			frameNum    = np.array([ f['frame'] for f in track ])
+			bboxes      = np.array([np.array(f['bbox']) for f in track])
+			frameI      = np.arange(frameNum[0],frameNum[-1]+1)
 			bboxesI    = []
 			for ij in range(0,4):
 				interpfn  = interp1d(frameNum, bboxes[:,ij])
 				bboxesI.append(interpfn(frameI))
-			bboxesI  = numpy.stack(bboxesI, axis=1)
-			if max(numpy.mean(bboxesI[:,2]-bboxesI[:,0]), numpy.mean(bboxesI[:,3]-bboxesI[:,1])) > config.minFaceSize:
+			bboxesI  = np.stack(bboxesI, axis=1)
+			if max(np.mean(bboxesI[:,2]-bboxesI[:,0]), np.mean(bboxesI[:,3]-bboxesI[:,1])) > config.minFaceSize:
 				tracks.append({'frame':frameI,'bbox':bboxesI})
 	return tracks
 
@@ -165,7 +171,7 @@ def crop_video(config, track, cropFile):
 		bs  = dets['s'][fidx]   # Detection box size
 		bsi = int(bs * (1 + 2 * cs))  # Pad videos by this amount 
 		image = cv2.imread(flist[frame])
-		frame = numpy.pad(image, ((bsi,bsi), (bsi,bsi), (0, 0)), 'constant', constant_values=(110, 110))
+		frame = np.pad(image, ((bsi,bsi), (bsi,bsi), (0, 0)), 'constant', constant_values=(110, 110))
 		my  = dets['y'][fidx] + bsi  # BBox center Y
 		mx  = dets['x'][fidx] + bsi  # BBox center X
 		face = frame[int(my-bs):int(my+bs*(1+2*cs)),int(mx-bs*(1+cs)):int(mx+bs*(1+cs))]
@@ -174,12 +180,16 @@ def crop_video(config, track, cropFile):
 	audioStart  = (track['frame'][0]) / 25
 	audioEnd    = (track['frame'][-1]+1) / 25
 	vOut.release()
-	command = ("ffmpeg -y -i %s -async 1 -ac 1 -vn -acodec pcm_s16le -ar 16000 -threads %d -ss %.3f -to %.3f %s -loglevel panic" % \
-		      (config.audioFilePath, config.nDataLoaderThread, audioStart, audioEnd, audioTmp)) 
+	# f'ffmpeg -y -i "{config.videoFilePath}" -ac 1 -ar 16000 "{config.audioFilePath}"'
+	command = f'ffmpeg -y -i "{config.audioFilePath}" -ac 1 -acodec pcm_s16le -ar 16000 -ss {audioStart:.3f} -to {audioEnd:.3f} "{audioTmp}"'
+	# command = ("ffmpeg -y -i %s -async 1 -ac 1 -vn -acodec pcm_s16le -ar 16000 -threads %d -ss %.3f -to %.3f %s -loglevel panic" % \
+	# 	      (config.audioFilePath, config.nDataLoaderThread, audioStart, audioEnd, audioTmp)) 
 	output = subprocess.call(command, shell=True, stdout=None) # Crop audio file
 	_, audio = wavfile.read(audioTmp)
-	command = ("ffmpeg -y -i %st.avi -i %s -threads %d -c:v copy -c:a copy %s.avi -loglevel panic" % \
-			  (cropFile, audioTmp, config.nDataLoaderThread, cropFile)) # Combine audio and video file
+	command = f'ffmpeg -y -i "{cropFile}t.avi" -i "{audioTmp}" -c:v copy -c:a copy "{cropFile}.avi"'
+
+	# command = ("ffmpeg -y -i %st.avi -i %s -threads %d -c:v copy -c:a copy %s.avi -loglevel panic" % \
+	# 		  (cropFile, audioTmp, config.nDataLoaderThread, cropFile)) # Combine audio and video file
 	output = subprocess.call(command, shell=True, stdout=None)
 	os.remove(cropFile + 't.avi')
 	return {'track':track, 'proc_track':dets}
@@ -189,7 +199,7 @@ def extract_MFCC(file, outPath):
 	sr, audio = wavfile.read(file)
 	mfcc = python_speech_features.mfcc(audio,sr) # (N_frames, 13)   [1s = 100 frames]
 	featuresPath = os.path.join(outPath, file.split('/')[-1].replace('.wav', '.npy'))
-	numpy.save(featuresPath, mfcc)
+	np.save(featuresPath, mfcc)
 
 def evaluate_network(files, config):
 	# GPU: active speaker detection by pretrained model
@@ -216,7 +226,7 @@ def evaluate_network(files, config):
 			else:
 				break
 		video.release()
-		videoFeature = numpy.array(videoFeature)
+		videoFeature = np.array(videoFeature)
 		length = min((audioFeature.shape[0] - audioFeature.shape[0] % 4) / 100, videoFeature.shape[0])
 		audioFeature = audioFeature[:int(round(length * 100)),:]
 		videoFeature = videoFeature[:int(round(length * 25)),:,:]
@@ -234,7 +244,7 @@ def evaluate_network(files, config):
 					score = s.lossAV.forward(out, labels = None)
 					scores.extend(score)
 			allScore.append(scores)
-		allScore = numpy.round((numpy.mean(numpy.array(allScore), axis = 0)), 1).astype(float)
+		allScore = np.round((np.mean(np.array(allScore), axis = 0)), 1).astype(float)
 		allScores.append(allScore)	
 	return allScores
 
@@ -247,7 +257,7 @@ def visualization(tracks, scores, config):
 		score = scores[tidx]
 		for fidx, frame in enumerate(track['track']['frame'].tolist()):
 			s = score[max(fidx - 2, 0): min(fidx + 3, len(score) - 1)] # average smoothing
-			s = numpy.mean(s)
+			s = np.mean(s)
 			faces[frame].append({'track':tidx, 'score':float(s),'s':track['proc_track']['s'][fidx], 'x':track['proc_track']['x'][fidx], 'y':track['proc_track']['y'][fidx]})
 	firstImage = cv2.imread(flist[0])
 	fw = firstImage.shape[1]
@@ -263,13 +273,16 @@ def visualization(tracks, scores, config):
 			cv2.putText(image,'%s'%(txt), (int(face['x']-face['s']), int(face['y']-face['s'])), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0,clr,255-clr),5)
 		vOut.write(image)
 	vOut.release()
-	command = ("ffmpeg -y -i %s -i %s -threads %d -c:v copy -c:a copy %s -loglevel panic" % \
-		(os.path.join(config.pyaviPath, 'video_only.avi'), os.path.join(config.pyaviPath, 'audio.wav'), \
-		config.nDataLoaderThread, os.path.join(config.pyaviPath,'video_out.avi'))) 
+	# command = ("ffmpeg -y -i %s -i %s -threads %d -c:v copy -c:a copy %s -loglevel panic" % \
+	# 	(os.path.join(config.pyaviPath, 'video_only.avi'), os.path.join(config.pyaviPath, 'audio.wav'), \
+	# 	config.nDataLoaderThread, os.path.join(config.pyaviPath,'video_out.avi')))
+	command = f'ffmpeg -y -i "{os.path.join(config.pyaviPath, "video_only.avi")}" -i "{os.path.join(config.pyaviPath, "audio.wav")}" -c:v copy -c:a copy "{os.path.join(config.pyaviPath, "video_out.avi")}"'
 	output = subprocess.call(command, shell=True, stdout=None)
 
 def evaluate_col_ASD(tracks, scores, config):
+    # config.videoFolder = config.colSavePath
 	txtPath = config.videoFolder + '/col_labels/fusion/*.txt' # Load labels
+	
 	predictionSet = {}
 	for name in {'long', 'bell', 'boll', 'lieb', 'sick', 'abbas'}:
 		predictionSet[name] = [[],[]]
@@ -296,7 +309,7 @@ def evaluate_col_ASD(tracks, scores, config):
 	for tidx, track in enumerate(tracks):
 		score = scores[tidx]				
 		for fidx, frame in enumerate(track['track']['frame'].tolist()):
-			s = numpy.mean(score[max(fidx - 2, 0): min(fidx + 3, len(score) - 1)]) # average smoothing
+			s = np.mean(score[max(fidx - 2, 0): min(fidx + 3, len(score) - 1)]) # average smoothing
 			faces[frame].append({'track':tidx, 'score':float(s),'s':track['proc_track']['s'][fidx], 'x':track['proc_track']['x'][fidx], 'y':track['proc_track']['y'][fidx]})
 	for fidx, fname in tqdm.tqdm(enumerate(flist), total = len(flist)):
 		if fidx in dictGT: # This frame has label
@@ -325,9 +338,9 @@ def evaluate_col_ASD(tracks, scores, config):
 	names.sort()
 	F1s = 0
 	for i in names:
-		scores = numpy.array(predictionSet[i][0])
-		labels = numpy.array(predictionSet[i][1])
-		scores = numpy.int64(scores > 0)
+		scores = np.array(predictionSet[i][0])
+		labels = np.array(predictionSet[i][1])
+		scores = np.int64(scores > 0)
 		F1 = f1_score(labels, scores)
 		ACC = accuracy_score(labels, scores)
 		if i != 'abbas':
@@ -336,180 +349,99 @@ def evaluate_col_ASD(tracks, scores, config):
 	print("Average F1:%.2f"%(100 * (F1s / 5)))	  
 
 
-def main():
-    # Create and configure settings
-    config = Config()
-    
-    # Set your paths here
-    # config.videoName = "sample_video.mp4"  # Change this to your video name without extension
-    # config.videoFolder = ""  # Change this to your video folder path
-    # config.videoPath = "video.mp4"  # Full path to your video file
-    # config.pretrainModel = "weight/pretrain_AVA_CVPR.model"  # Path to your pretrained model
-    
-    # Create necessary directories
-    if os.path.exists(config.savePath):
-        rmtree(config.savePath)
-    os.makedirs(config.pyaviPath, exist_ok=True)
-    os.makedirs(config.pyframesPath, exist_ok=True)
-    os.makedirs(config.pyworkPath, exist_ok=True)
-    os.makedirs(config.pycropPath, exist_ok=True)
 
-    print("Here")
-
-    # Set derived paths
-    config.videoFilePath = os.path.join(config.pyaviPath, 'video.avi')
-    config.audioFilePath = os.path.join(config.pyaviPath, 'audio.wav')
-
-    # Extract video
-    if config.duration == 0:
-        command = f"ffmpeg -y -i {config.videoPath} -qscale:v 2 -threads {config.nDataLoaderThread} -async 1 -r 25 {config.videoFilePath} -loglevel panic"
-    else:
-        command = f"ffmpeg -y -i {config.videoPath} -qscale:v 2 -threads {config.nDataLoaderThread} -ss {config.start} -to {config.start + config.duration} -async 1 -r 25 {config.videoFilePath} -loglevel panic"
-    subprocess.call(command, shell=True, stdout=None)
-    
-    # Continue with the rest of your processing pipeline...
-    # (The rest of the main function remains the same, just change 'args' to 'config')
-    sys.stderr.write(time.strftime("%Y-%m-%d %H:%M:%S") + " Extract the video and save in %s \r\n" %(config.videoFilePath))
-	
-	# Extract audio
-    config.audioFilePath = os.path.join(config.pyaviPath, 'audio.wav')
-    command = ("ffmpeg -y -i %s -qscale:a 0 -ac 1 -vn -threads %d -ar 16000 %s -loglevel panic" % (config.videoFilePath, config.nDataLoaderThread, config.audioFilePath))
-    subprocess.call(command, shell=True, stdout=None)
-    sys.stderr.write(time.strftime("%Y-%m-%d %H:%M:%S") + " Extract the audio and save in %s \r\n" %(config.audioFilePath))
-
-	# Extract the video frames
-    command = ("ffmpeg -y -i %s -qscale:v 2 -threads %d -f image2 %s -loglevel panic" % \
-		(config.videoFilePath, config.nDataLoaderThread, os.path.join(config.pyframesPath, '%06d.jpg'))) 
-    subprocess.call(command, shell=True, stdout=None)
-    sys.stderr.write(time.strftime("%Y-%m-%d %H:%M:%S") + " Extract the frames and save in %s \r\n" %(config.pyframesPath))
-
-	# Scene detection for the video frames
-    scene = scene_detect(config)
-    sys.stderr.write(time.strftime("%Y-%m-%d %H:%M:%S") + " Scene detection and save in %s \r\n" %(config.pyworkPath))	
-
-	# Face detection for the video frames
-    faces = inference_video(config)
-    sys.stderr.write(time.strftime("%Y-%m-%d %H:%M:%S") + " Face detection and save in %s \r\n" %(config.pyworkPath))
-
-	# Face tracking
-    allTracks, vidTracks = [], []
-    for shot in scene:
-        if shot[1].frame_num - shot[0].frame_num >= config.minTrack: # Discard the shot frames less than minTrack frames
-            allTracks.extend(track_shot(config, faces[shot[0].frame_num:shot[1].frame_num])) # 'frames' to present this tracks' timestep, 'bbox' presents the location of the faces
-    sys.stderr.write(time.strftime("%Y-%m-%d %H:%M:%S") + " Face track and detected %d tracks \r\n" %len(allTracks))
-
-	# Face clips cropping
-    for ii, track in tqdm.tqdm(enumerate(allTracks), total = len(allTracks)):
-        vidTracks.append(crop_video(config, track, os.path.join(config.pycropPath, '%05d'%ii)))
-    savePath = os.path.join(config.pyworkPath, 'tracks.pckl')
-    with open(savePath, 'wb') as fil:
-        pickle.dump(vidTracks, fil)
-    sys.stderr.write(time.strftime("%Y-%m-%d %H:%M:%S") + " Face Crop and saved in %s tracks \r\n" %config.pycropPath)
-    fil = open(savePath, 'rb')
-    vidTracks = pickle.load(fil)
-
-    # Active Speaker Detection
-    files = glob.glob("%s/*.avi"%config.pycropPath)
-    files.sort()
-    scores = evaluate_network(files, config)
-    savePath = os.path.join(config.pyworkPath, 'scores.pckl')
-    with open(savePath, 'wb') as fil:
-        pickle.dump(scores, fil)
-    sys.stderr.write(time.strftime("%Y-%m-%d %H:%M:%S") + " Scores extracted and saved in %s \r\n" %config.pyworkPath)
-
-    if config.evalCol == True:
-        evaluate_col_ASD(vidTracks, scores, config) # The columnbia video is too big for visualization. You can still add the `visualization` funcition here if you want
-        quit()
-    else:
-        # Visualization, save the result as the new video	
-        visualization(vidTracks, scores, config)	
-
-
-# (Assume that all necessary imports and the functions below are already defined:
-#  - scene_detect
-#  - inference_video
-#  - bb_intersection_over_union
-#  - track_shot
-#  - crop_video
-#  - [other functions if needed])
-# Also assume that S3FD, ASD, and any other models are imported properly.
 
 def preprocess_video_file(video_file, output_root):
     """
-    Preprocess a video file into cropped face clips for active speaker detection.
-    
-    This function:
-      1. Sets up a configuration.
-      2. Extracts and converts the video to a standard AVI format.
-      3. Extracts audio and frames.
-      4. Runs scene detection.
-      5. Runs face detection and tracking.
-      6. Crops the face clips with synchronized audio.
+    Simplified video preprocessing that:
+    1. Converts video to standard AVI format
+    2. Extracts audio as WAV
+    3. Extracts frames as JPG images
     
     Parameters:
-      video_file (str): Full path to the input video file.
-      output_root (str): Root directory where all intermediate and result folders will be created.
-    
-    Returns:
-      List[str]: Sorted list of file paths (AVI files) in the cropped folder (ready for evaluate_network).
+        video_file (str): Path to input video file
+        output_root (str): Root directory for outputs
     """
-    # Create a new configuration and update paths
-    config = Config()
-    
-    # Update video path to the provided file
+    # Initialize configuration
+    config = SimpleConfig()
     config.videoPath = video_file
-
-    # Set output paths based on the given output_root
     config.savePath = os.path.join(output_root, 'results')
+    
+    # Set up directory structure
     config.pyaviPath = os.path.join(config.savePath, 'pyavi')
     config.pyframesPath = os.path.join(config.savePath, 'pyframes')
+    config.videoFilePath = os.path.join(config.pyaviPath, 'video.avi')
+    config.audioFilePath = os.path.join(config.pyaviPath, 'audio.wav')
     config.pyworkPath = os.path.join(config.savePath, 'pywork')
     config.pycropPath = os.path.join(config.savePath, 'pycrop')
     
-    # (Optional) If you have additional parameters (like evalCol), you can set them here.
-    config.evalCol = False
-
-    # Remove any existing output (be careful – this deletes the folder!)
+    # Create fresh directories
     if os.path.exists(config.savePath):
         rmtree(config.savePath)
-    os.makedirs(config.pyaviPath, exist_ok=True)
-    os.makedirs(config.pyframesPath, exist_ok=True)
-    os.makedirs(config.pyworkPath, exist_ok=True)
-    os.makedirs(config.pycropPath, exist_ok=True)
-
-    # Derived paths for video and audio extraction
-    config.videoFilePath = os.path.join(config.pyaviPath, 'video.avi')
-    config.audioFilePath = os.path.join(config.pyaviPath, 'audio.wav')
-
-    # 1. Convert the input video to a standardized AVI format (25 fps)
-    if config.duration == 0:
-        command = f"ffmpeg -y -i {config.videoPath} -qscale:v 2 -threads {config.nDataLoaderThread} -async 1 -r 25 {config.videoFilePath} -loglevel panic"
-    else:
-        command = f"ffmpeg -y -i {config.videoPath} -qscale:v 2 -threads {config.nDataLoaderThread} -ss {config.start} -to {config.start + config.duration} -async 1 -r 25 {config.videoFilePath} -loglevel panic"
-    subprocess.call(command, shell=True, stdout=None)
-    sys.stderr.write(time.strftime("%Y-%m-%d %H:%M:%S") + f" Video extracted to {config.videoFilePath}\n")
+    os.makedirs(config.pyaviPath)
+    os.makedirs(config.pyframesPath)
+    os.makedirs(config.pyworkPath)
+    os.makedirs(config.pycropPath)
     
-    # 2. Extract audio from the standardized video
-    command = ("ffmpeg -y -i %s -qscale:a 0 -ac 1 -vn -threads %d -ar 16000 %s -loglevel panic" %
-               (config.videoFilePath, config.nDataLoaderThread, config.audioFilePath))
-    subprocess.call(command, shell=True, stdout=None)
-    sys.stderr.write(time.strftime("%Y-%m-%d %H:%M:%S") + f" Audio extracted to {config.audioFilePath}\n")
+    print("Processing video:", config.videoPath)
+    
+    # 1. Convert video to standard AVI format (25 fps)
+    print("Converting video to AVI format...")
+    command = f'ffmpeg -y -i "{config.videoPath}" -qscale:v 2 -r 25 "{config.videoFilePath}"'
+    result = subprocess.run(command, shell=True, capture_output=True, text=True)
+    if result.returncode != 0:
+        print("Error in video conversion:", result.stderr)
+        return None
+    print("Video converted successfully")
+    
+    # 2. Extract audio as WAV (16kHz, mono)
+    print("Extracting audio...")
+    command = f'ffmpeg -y -i "{config.videoFilePath}" -ac 1 -ar 16000 "{config.audioFilePath}"'
+    result = subprocess.run(command, shell=True, capture_output=True, text=True)
+    if result.returncode != 0:
+        print("Error in audio extraction:", result.stderr)
+        return None
+    print("Audio extracted successfully")
+    
+    # 3. Extract frames as JPG images
+    print("Extracting frames...")
+    command = f'ffmpeg -y -i "{config.videoFilePath}" -qscale:v 2 -f image2 "{os.path.join(config.pyframesPath, "%06d.jpg")}"'
+    result = subprocess.run(command, shell=True, capture_output=True, text=True)
+    if result.returncode != 0:
+        print("Error in frame extraction:", result.stderr)
+        return None
+    print("Frames extracted successfully")
+    
+    return {
+        'video': config.videoFilePath,
+        'audio': config.audioFilePath,
+        'frames': config.pyframesPath
+    }, config
 
-    # 3. Extract frames from the video
-    command = ("ffmpeg -y -i %s -qscale:v 2 -threads %d -f image2 %s -loglevel panic" %
-               (config.videoFilePath, config.nDataLoaderThread, os.path.join(config.pyframesPath, '%06d.jpg')))
-    subprocess.call(command, shell=True, stdout=None)
-    sys.stderr.write(time.strftime("%Y-%m-%d %H:%M:%S") + f" Frames extracted to {config.pyframesPath}\n")
-
-    # 4. Run scene detection on the extracted frames
+if __name__ == "__main__":
+    # Example usage
+    # video_file = r"path/to/your/video.mp4"  # Replace with your video path
+    # output_dir = r"path/to/output"          # Replace with your output path
+    
+    video_file = r"C:\Users\Rohit Francis\Desktop\Codes\TESTINGS\Diarization Test\Light-ASD\ASD_SAMPLE - Made with Clipchamp.mp4"
+    output_dir = r"C:\Users\Rohit Francis\Desktop\Codes\TESTINGS\Diarization Test\Light-ASD\PreprocessOutput"
+    
+    result, config = preprocess_video_file(video_file, output_dir)
+    
+    if result:
+        print("\nProcessing completed successfully!")
+        print(f"Processed video: {result['video']}")
+        print(f"Extracted audio: {result['audio']}")
+        print(f"Extracted frames: {result['frames']}")
+    else:
+        print("Processing failed!")
+        
     scene = scene_detect(config)
-    sys.stderr.write(time.strftime("%Y-%m-%d %H:%M:%S") + f" Scene detection completed.\n")
-
-    # 5. Run face detection on the frames using S3FD
+    print(scene)
+    
     faces = inference_video(config)
-    sys.stderr.write(time.strftime("%Y-%m-%d %H:%M:%S") + f" Face detection completed.\n")
-
-    # 6. Face tracking: group face detections into continuous tracks.
+    # print(faces)
+    
     allTracks = []
     for shot in scene:
         # Check if the shot length is sufficient for tracking
@@ -517,46 +449,49 @@ def preprocess_video_file(video_file, output_root):
             # faces[shot[0].frame_num:shot[1].frame_num] corresponds to the frames in this scene
             tracks_in_shot = track_shot(config, faces[shot[0].frame_num:shot[1].frame_num])
             allTracks.extend(tracks_in_shot)
-    sys.stderr.write(time.strftime("%Y-%m-%d %H:%M:%S") + f" {len(allTracks)} face tracks detected.\n")
 
-    # 7. Crop face clips from the video based on the face tracks.
+    # print(allTracks[0])
+    
     vidTracks = []
+    files = os.listdir(r"C:\Users\Rohit Francis\Desktop\Codes\TESTINGS\Diarization Test\Light-ASD\PreprocessOutput\results\pycrop")
     for ii, track in enumerate(tqdm.tqdm(allTracks, desc="Cropping face clips")):
+        # print("inside loop:" ,ii, track)
         crop_file_base = os.path.join(config.pycropPath, f'{ii:05d}')
         cropped_result = crop_video(config, track, crop_file_base)
         vidTracks.append(cropped_result)
+  
+    # for ii, track in enumerate(tqdm.tqdm(allTracks, desc="Cropping face clips")):
+    #     try:
+    #         print("inside loop:" ,ii, files[ii])
+    #         # crop_file_base = os.path.join(config.pycropPath, f'{ii:05d}')
+
+    #         cropped_result = crop_video(config, track, files[ii])
+    #         vidTracks.append(cropped_result)
+
+    #     except IndexError as e:
+    #         print(vidTracks)
+
+    # print(vidTracks)
 
     # Save the tracks (optional, for later inspection)
     tracks_save_path = os.path.join(config.pyworkPath, 'tracks.pckl')
     with open(tracks_save_path, 'wb') as fil:
         pickle.dump(vidTracks, fil)
-    sys.stderr.write(time.strftime("%Y-%m-%d %H:%M:%S") + f" Face clips cropped and saved in {config.pycropPath}\n")
-
-    # 8. Return the list of cropped AVI file paths (which will be used by evaluate_network)
-    cropped_files = sorted(glob.glob(os.path.join(config.pycropPath, '*.avi')))
-    return cropped_files
-
-# Example usage:
-if __name__ == '__main__':
-    # Replace these paths with your actual video file and desired output directory.
-    video_file_path = r"C:\Users\Rohit Francis\Desktop\Codes\TESTINGS\Diarization Test\Light-ASD\ASD_SAMPLE - Made with Clipchamp.mp4"
-    output_directory = r"C:\Users\Rohit Francis\Desktop\Codes\TESTINGS\Diarization Test\Light-ASD\PreprocessOutput"
+        
+    fil = open(tracks_save_path, 'rb')
+    vidTracks = pickle.load(fil)
     
-    # Preprocess the video file
-    cropped_clip_files = preprocess_video_file(video_file_path, output_directory)
+    # print("Vidtracks: ")
+    # print(vidTracks)
     
-    # Print the list of preprocessed (cropped) files.
-    print("Preprocessed video clips:")
-    for clip in cropped_clip_files:
-        print(clip)
+    files = glob.glob("%s/*.avi"%config.pycropPath)
+    files.sort()
+    scores = evaluate_network(files, config)
+    print("scores: ", scores)
     
-    # Now you can pass 'cropped_clip_files' to evaluate_network:
-    # scores = evaluate_network(cropped_clip_files, config) 
-    # (Make sure that the same configuration or any necessary parameters are available.)
-
-
-
-# if __name__ == '__main__':
-#     main()
-#     evaluate_network()
-
+    savePath = os.path.join(config.pyworkPath, 'scores.pckl')
+    with open(savePath, 'wb') as fil:
+        pickle.dump(scores, fil)
+    print(scores[0].shape)    
+    evaluate_col_ASD(vidTracks, scores, config)
+    visualization(vidTracks, scores, config)
