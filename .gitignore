@@ -163,3 +163,4 @@ cython_debug/
 
 video_model/src/data/dataset/GRID/video/
 speaksense/*
+LIGHT_ASD/realtime2.py

@@ -93,7 +93,7 @@ class ASD(nn.Module):
         try:
             loadedState = torch.load(path, map_location=self.device)
             for name, param in loadedState.items():
-                origName = name;
+                origName = name
                 if name not in selfState:
                     name = name.replace("module.", "")
                     if name not in selfState:
@@ -106,3 +106,9 @@ class ASD(nn.Module):
         except Exception as e:
             print(f"Error loading model parameters: {e}")
             raise e
+        
+        
+if __name__ == "__main__":
+    model = ASD()
+    # print(model.named_modules)
+    x = torch.randn(())

@@ -16,16 +16,17 @@ warnings.filterwarnings("ignore")
 from model.faceDetector.s3fd import S3FD  # '.' means "current package" (ASD_BASED_ARCH)
 from ASD import ASD                       # '.' refers to ASD.py in the same directory
 # LIGHT_ASD\weight\finetuning_TalkSet.model
+# LIGHT_ASD\weight\pretrain_AVA_CVPR.model
 class RealtimeASD:
-    def __init__(self, model_path="weight/finetuning_TalkSet.model", use_cuda=False):
+    def __init__(self, model_path="LIGHT_ASD/weight/finetuning_TalkSet.model", use_cuda=False):
         # Configuration parameters
-        self.facedet_scale = 0.3  # Reduced for faster detection
+        self.facedet_scale = 0.5  # Reduced for faster detection
         self.min_face_size = 1
         self.crop_scale = 0.40
         self.window_size = 15  # Significantly reduced buffer size for better performance
         self.fps = 30  # Target higher FPS
         self.min_track_len = 2  # Further reduced for quicker evaluation
-        self.iou_threshold = 0.45  # Slightly reduced threshold for better face tracking
+        self.iou_threshold = 0.60  # Slightly reduced threshold for better face tracking
         self.use_cuda = use_cuda and torch.cuda.is_available()
         
         # Device selection
@@ -33,7 +34,7 @@ class RealtimeASD:
         print(f"Using device: {self.device}")
         
         # Demo mode flag - if True, will generate simulated scores for testing
-        self.demo_mode = True  # Set to True to enable simulated speaking behavior
+        self.demo_mode = False  # Set to True to enable simulated speaking behavior
         
         try:
             # Initialize models
@@ -435,6 +436,7 @@ class RealtimeASD:
                     if not self.frame_buffer:
                         continue
                         
+                    # print("detection running ig")
                     face_crop = self._crop_face(self.frame_buffer[-1], i)
                     if face_crop is None:
                         continue
@@ -469,6 +471,7 @@ class RealtimeASD:
                     # Process with ASD model
                     with torch.no_grad():
                         # Move tensors to the appropriate device
+                        # print("pakka running")
                         device = torch.device(self.device)
                         inputA = torch.FloatTensor(mfcc).unsqueeze(0).to(device)
                         inputV = torch.FloatTensor(video_features).unsqueeze(0).to(device)
@@ -479,10 +482,10 @@ class RealtimeASD:
                         
                         # Get final output from audio-visual backend
                         out = self.asd_model.model.forward_audio_visual_backend(embedA, embedV)
-                        
+                        print(out)
                         # Get score from model
                         score_value = self._model_score_prediction(out)
-                
+                        
                 # Store the score
                 if i not in self.track_scores:
                     self.track_scores[i] = {'scores': [], 'last_eval': frame_idx}
