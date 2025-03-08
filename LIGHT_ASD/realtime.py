@@ -12,11 +12,12 @@ import warnings
 warnings.filterwarnings("ignore")
 
 # Import the face detector and ASD model
-from model.faceDetector.s3fd import S3FD
-from ASD import ASD
-
+# In LightASD/realtime.py
+from model.faceDetector.s3fd import S3FD  # '.' means "current package" (ASD_BASED_ARCH)
+from ASD import ASD                       # '.' refers to ASD.py in the same directory
+# LIGHT_ASD\weight\finetuning_TalkSet.model
 class RealtimeASD:
-    def __init__(self, model_path="weight/pretrain_AVA_CVPR.model", use_cuda=False):
+    def __init__(self, model_path="weight/finetuning_TalkSet.model", use_cuda=False):
         # Configuration parameters
         self.facedet_scale = 0.3  # Reduced for faster detection
         self.min_face_size = 1

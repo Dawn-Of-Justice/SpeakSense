@@ -4,7 +4,7 @@ import threading
 from Live_transcription.OnlineTranscription import RealtimeTranscriber
 from audio_model.Classifier import AddressClassifier
 import time
-# from ASD_BASED_ARCH.realtime import RealtimeASD, main
+from LIGHT_ASD.realtime import RealtimeASD, main
 from LLM import AI
 
 # A state variable as of now set to True, but will be modifed by the ASD function thread based on ASD Models prediction
@@ -25,9 +25,9 @@ def transcription():
                 time.sleep(0.1)
         except KeyboardInterrupt:
             print("Stopping...")
-# def ASD():
-#     # ASD realtime code goes here
-#     main()
+def ASD():
+    # ASD realtime code goes here
+    main()
                 
 def Addressing():
     # The Classifier model works here
