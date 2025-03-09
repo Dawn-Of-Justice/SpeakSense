@@ -1,4 +1,4 @@
-from model.faceDetector.s3fd import S3FD
+# from model.faceDetector.s3fd import S3FD
 import threading
 import pyaudio
 import cv2
@@ -9,8 +9,12 @@ from queue import Queue
 import time
 import python_speech_features
 import torch
-from ASD import ASD
+# from ASD import ASD
 import math
+from .model.faceDetector.s3fd import S3FD
+from .ASD import ASD
+
+shared_state = None
 
 # Use CUDA if available, otherwise CPU
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -221,7 +225,10 @@ def record_audio(duration=2, sample_rate=16000):
         
         print(f"Audio recorded: {len(audio_data)} samples")
 
-if __name__ == "__main__":
+
+def main(run_sub_audio_thread=True):
+    global shared_state
+    
     # Initialize camera
     cam = cv2.VideoCapture(0)
     count = 0
@@ -229,14 +236,14 @@ if __name__ == "__main__":
     # Face buffer to store a sequence of face frames
     face_buffer = []
     max_buffer_size = 25  # 25 frames = 1 second at 25 fps
-    
-    # Start audio recording thread
-    audio_thread = threading.Thread(target=record_audio, args=(2, 16000))
-    audio_thread.daemon = True
-    audio_thread.start()
-    
-    # Create directory for saving audio files if needed
-    os.makedirs("audio_samples", exist_ok=True)
+    if run_sub_audio_thread:
+        # Start audio recording thread
+        audio_thread = threading.Thread(target=record_audio, args=(2, 16000))
+        audio_thread.daemon = True
+        audio_thread.start()
+        
+        # Create directory for saving audio files if needed
+        os.makedirs("audio_samples", exist_ok=True)
     
     # For tracking face identities (very basic implementation)
     tracked_faces = {}
@@ -305,8 +312,10 @@ if __name__ == "__main__":
                     
                     # Draw rectangle and ID
                     color = (0, 0, 255)  # Default color (red)
+                    shared_state = False
                     if tracked_faces[face_id]['speaking_score'] > 0.5:
                         color = (0, 255, 0)  # Green for speaking
+                        shared_state = True
                         
                     cv2.rectangle(frame, (int(bbox[0]), int(bbox[1])), 
                                 (int(bbox[2]), int(bbox[3])), color, 4)
@@ -349,3 +358,6 @@ if __name__ == "__main__":
     # Cleanup
     cam.release()
     cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    main()

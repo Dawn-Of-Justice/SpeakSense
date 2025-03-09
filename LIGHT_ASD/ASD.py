@@ -5,8 +5,8 @@ import torch.nn.functional as F
 import sys, time, numpy, os, subprocess, pandas, tqdm
 from subprocess import PIPE
 
-from loss import lossAV, lossV
-from model.Model import ASD_Model
+from .loss import lossAV, lossV
+from .model.Model import ASD_Model
 
 class ASD(nn.Module):
     def __init__(self, lr = 0.001, lrDecay = 0.95, device='cuda', **kwargs):
