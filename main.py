@@ -7,10 +7,18 @@ import importlib
 from Live_transcription.OnlineTranscription import RealtimeTranscriber
 from audio_model.Classifier import AddressClassifier
 from LLM import AI
-
+import pyttsx3
 # Import and then directly access the module to get up-to-date shared_state
 import LIGHT_ASD.realtime3 as asd_module
 from LIGHT_ASD.realtime3 import main as asd_main
+
+import spacy
+
+nlp = spacy.blank("en")  # Load English tokenizer
+
+def remove_non_english_text(response):
+    doc = nlp(response)
+    return ' '.join([token.text for token in doc if token.is_alpha])  # Keep only alphabetic words
 
 # Create thread-safe queues for communication between threads
 transcription_queue = queue.Queue()
@@ -98,8 +106,23 @@ def generate_response(prompt_text):
         prompt=f"Input: {prompt_text}", 
         system_message="You are an AI model who gives to Live transcription message when you are addressed\n\ninput: I was reading about the use of AI in agriculture. What do you think,\noutput: <response>"
     )
-    print(f"AI: {response}")
-    response_queue.put(response)
+    # print(f"AI: {response}")
+    cleaned_response = remove_non_english_text(response)
+    print(f"AI: {cleaned_response}")
+
+    engine = pyttsx3.init()
+
+    # Set speech rate to normal (default is around 200)
+    engine.setProperty("rate", 140)  # Adjust this value if needed
+
+    # Set voice to female
+    voices = engine.getProperty("voices")
+    engine.setProperty("voice", voices[1].id)
+
+    # Speak the cleaned text
+    engine.say(cleaned_response)
+    engine.runAndWait()
+    response_queue.put(cleaned_response)
 
 def asd_thread():
     """Runs the Active Speaker Detection in a separate thread"""
