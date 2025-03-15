@@ -1,3 +1,4 @@
+import traceback
 import torch
 import numpy as np
 import pyaudio
@@ -58,7 +59,7 @@ class WhisperRealtimeTranscriber:
             
             # Set model to English-only for better performance
             self.model.config.forced_decoder_ids = self.processor.get_decoder_prompt_ids(
-                language="english", 
+                language="en",  # Explicitly specify English
                 task="transcribe"
             )
             
@@ -276,12 +277,29 @@ class WhisperRealtimeTranscriber:
             buffer_duration = len(audio_to_process) / self.sample_rate
             
             # Process audio for Whisper input
-            input_features = self.processor(
+            processed_features = self.processor(
                 audio_to_process, 
                 sampling_rate=self.sample_rate, 
                 return_tensors="pt"
-            ).input_features.to(self.device)
-            
+            )
+
+            # Get input features and move to device - handle both possible return types
+            if hasattr(processed_features, "input_features"):
+                input_features = processed_features.input_features
+            elif isinstance(processed_features, dict) and "input_features" in processed_features:
+                input_features = processed_features["input_features"]
+            else:
+                logger.error(f"Unexpected processor output format: {type(processed_features)}")
+                logger.debug(f"Processor output keys: {processed_features.keys() if hasattr(processed_features, 'keys') else 'no keys'}")
+                return
+
+            # Move to device
+            input_features = input_features.to(self.device)
+
+            # Convert to half precision if model is in half precision
+            if self.device == "cuda" and hasattr(self.model, 'dtype') and self.model.dtype == torch.float16:
+                input_features = input_features.half()
+                                    
             # Generate with token probabilities for confidence scoring
             with torch.no_grad():
                 outputs = self.model.generate(
@@ -345,7 +363,8 @@ class WhisperRealtimeTranscriber:
                 f.write(f"{transcription}->{confidence:.2f}\n")
                 
         except Exception as e:
-            logger.error(f"Error in transcription: {e}")
+            logger.error(f"Error in transcription: {str(e)}")
+            logger.error(f"Error details: {traceback.format_exc()}")
     
     def start_transcribing(self):
         """Start the transcription process"""
