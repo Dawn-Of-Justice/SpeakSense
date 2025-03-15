@@ -6,7 +6,7 @@ import sys
 import importlib
 from Live_transcription.OnlineTranscription import RealtimeTranscriber
 from Live_transcription.Transcription import WhisperRealtimeTranscriber
-from audio_model.Classifier import AddressClassifierPt
+from audio_model.Classifier import AddressClassifier
 from LLM import AI
 import pyttsx3
 # Import and then directly access the module to get up-to-date shared_state
@@ -68,7 +68,7 @@ def addressing_thread():
     global clear_state, transcribed_stuff
     try:
         print("Initializing addressing classifier...")
-        classifier = AddressClassifierPt()
+        classifier = AddressClassifier()
         print("Addressing classifier initialized!")
         
         context = ""
