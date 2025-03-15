@@ -2,12 +2,8 @@
 SpeakSense: A multimodal deep learning system for detecting when a user is addressing
 a virtual assistant by analyzing both audio and video in real-time.
 
-This implementation features:
-- Thread-safe state management
-- Sliding window context system
-- Improved turn-taking for natural conversation flow
-- Producer-consumer pattern for component communication
-- Robust error handling and recovery
+This implementation includes enhanced audio feedback prevention to stop the system
+from listening to its own TTS output.
 """
 
 import threading
@@ -16,7 +12,10 @@ import queue
 import traceback
 import os
 import logging
+import numpy as np
 from typing import Dict, List, Optional, Any
+
+import pyaudio
 
 # Import your existing components
 from Live_transcription.Transcription import WhisperRealtimeTranscriber
@@ -60,6 +59,10 @@ class StateManager:
         self._pause_transcription = False
         self._last_state_change = time.time()
         
+        # Audio feedback prevention
+        self._audio_suppression_active = False
+        self._last_human_energy = 0.02  # Starting baseline for human speech energy
+        
         # Event listeners
         self.state_change_callbacks = []
     
@@ -77,6 +80,16 @@ class StateManager:
             self._ai_is_speaking = value
             self._last_state_change = time.time()
             
+            # When AI starts speaking, activate audio suppression
+            if value and not old_value:
+                self._audio_suppression_active = True
+                logger.debug("Audio suppression activated")
+            
+            # When AI stops speaking, keep suppression active for a short delay
+            if not value and old_value:
+                # Audio suppression will be deactivated after a cooldown period
+                threading.Timer(0.5, self._deactivate_suppression).start()
+            
             # Notify listeners if state changed
             if old_value != value:
                 for callback in self.state_change_callbacks:
@@ -84,6 +97,18 @@ class StateManager:
                         callback("ai_speaking", value)
                     except Exception as e:
                         logger.error(f"Error in state change callback: {e}")
+    
+    def _deactivate_suppression(self):
+        """Deactivate audio suppression after cooldown period"""
+        with self.lock:
+            self._audio_suppression_active = False
+            logger.debug("Audio suppression deactivated")
+    
+    @property
+    def audio_suppression_active(self) -> bool:
+        """Thread-safe access to audio suppression state"""
+        with self.lock:
+            return self._audio_suppression_active
     
     @property
     def system_active(self) -> bool:
@@ -110,6 +135,20 @@ class StateManager:
         with self.lock:
             self._pause_transcription = value
     
+    @property
+    def last_human_energy(self) -> float:
+        """Get the last recorded human speech energy level"""
+        with self.lock:
+            return self._last_human_energy
+    
+    @last_human_energy.setter
+    def last_human_energy(self, value: float):
+        """Update the last recorded human speech energy level"""
+        with self.lock:
+            # Only update when not speaking to avoid contamination with AI speech
+            if not self._ai_is_speaking and not self._audio_suppression_active:
+                self._last_human_energy = value
+    
     def add_state_change_listener(self, callback):
         """Add a callback function to be called when state changes"""
         with self.lock:
@@ -120,6 +159,7 @@ class StateManager:
         with self.lock:
             if callback in self.state_change_callbacks:
                 self.state_change_callbacks.remove(callback)
+
 
 class ContextManager:
     """
@@ -155,6 +195,7 @@ class ContextManager:
         """Clear the entire context"""
         with self.lock:
             self.context_tokens = []
+
 
 class ConversationManager:
     """
@@ -220,6 +261,77 @@ class ConversationManager:
         with self.lock:
             return self.state
 
+
+###################
+# Audio Analysis
+###################
+
+class AudioAnalyzer:
+    """
+    Analyzes audio for voice activity detection and feedback prevention
+    """
+    
+    def __init__(self, state_manager: StateManager):
+        self.state_manager = state_manager
+        self.energy_threshold = 0.02  # Base threshold for voice activity
+        self.energy_adjustment_rate = 0.1  # How quickly to adapt the threshold
+        
+        # Keep a history of recent audio to detect patterns
+        self.recent_energies = []
+        self.max_history = 20
+    
+    def is_human_voice(self, audio_np: np.ndarray) -> bool:
+        """
+        Determine if audio is likely from a human (vs. from speakers)
+        
+        Returns:
+            bool: True if likely human speech
+        """
+        if len(audio_np) == 0:
+            return False
+            
+        # Calculate energy metrics
+        energy = np.abs(audio_np).mean()
+        energy_variance = np.var(np.abs(audio_np))
+        
+        # Update energy history
+        self.recent_energies.append(energy)
+        if len(self.recent_energies) > self.max_history:
+            self.recent_energies.pop(0)
+        
+        # Get baseline from state manager
+        baseline_energy = self.state_manager.last_human_energy
+        
+        # If AI is speaking, use stricter detection to avoid feedback
+        if self.state_manager.ai_is_speaking or self.state_manager.audio_suppression_active:
+            # During AI speech, require significantly higher energy and variance
+            # to consider it human speech (to avoid feedback)
+            energy_ratio = energy / baseline_energy if baseline_energy > 0 else 1.0
+            
+            # Speaker output usually has lower variance than human speech
+            is_human = (
+                energy_variance > 0.0008 and  # Higher variance threshold
+                energy_ratio > 1.8 and        # Much louder than baseline
+                energy > self.energy_threshold * 1.5  # Higher absolute threshold
+            )
+            
+            if is_human:
+                logger.debug(f"Detected human voice during AI speech: energy={energy:.4f}, variance={energy_variance:.6f}, ratio={energy_ratio:.2f}")
+            
+            return is_human
+        
+        # Normal operation (AI not speaking)
+        is_human = energy > self.energy_threshold
+        
+        # Update baseline energy for future comparisons
+        if is_human:
+            # Smooth update to the energy baseline
+            new_baseline = baseline_energy * (1 - self.energy_adjustment_rate) + energy * self.energy_adjustment_rate
+            self.state_manager.last_human_energy = new_baseline
+        
+        return is_human
+
+
 ###################
 # Processing Components
 ###################
@@ -260,6 +372,7 @@ class TranscriptionProcessor:
         
         return filtered
 
+
 class ResponseGenerator:
     """
     Generates AI responses based on conversation context
@@ -296,13 +409,14 @@ class ResponseGenerator:
             logger.error(f"Error generating response: {e}")
             return "I'm sorry, I couldn't understand that properly. Could you please repeat?"
         finally:
-            # Always reset speaking state, even if there was an error
+            # State manager will handle the audio suppression cooldown
             self.state_manager.ai_is_speaking = False
     
     def _clean_response(self, response: str) -> str:
         """Clean and filter the generated response"""
         doc = nlp(response)
         return ' '.join([token.text for token in doc if token.is_alpha or token.text.isspace() or token.text in ",.!?"])
+
 
 class SpeechSynthesizer:
     """
@@ -343,6 +457,7 @@ class SpeechSynthesizer:
         except Exception as e:
             logger.error(f"Error in speech synthesis: {e}")
 
+
 ###################
 # Thread Workers
 ###################
@@ -356,14 +471,19 @@ class TranscriptionWorker:
         self, 
         state_manager: StateManager, 
         output_queue: queue.Queue,
-        processor: TranscriptionProcessor
+        processor: TranscriptionProcessor,
+        audio_analyzer: AudioAnalyzer
     ):
         self.state_manager = state_manager
         self.output_queue = output_queue
         self.processor = processor
-        self.transcriber = WhisperRealtimeTranscriber()
+        self.audio_analyzer = audio_analyzer
+        self.transcriber = WhisperRealtimeTranscriber(optimize=True)
         self.running = False
         self.thread = None
+        
+        # Audio buffer for analysis
+        self.current_audio_buffer = np.array([], dtype=np.float32)
     
     def start(self):
         """Start the transcription worker thread"""
@@ -395,21 +515,51 @@ class TranscriptionWorker:
             
             # Main processing loop
             while self.running and self.state_manager.system_active:
-                # Only process transcription when AI is not speaking
-                if not self.state_manager.ai_is_speaking and not self.state_manager.pause_transcription:
-                    current_transcription = self.transcriber.last_transcription
+                try:
+                    # CRITICAL: Skip all audio processing when AI is speaking or
+                    # audio suppression is active to prevent feedback
+                    if self.state_manager.ai_is_speaking or self.state_manager.audio_suppression_active:
+                        # Clear audio buffers to prevent processing AI's own speech
+                        with self.transcriber.transcription_lock:
+                            self.transcriber.audio_buffer = np.array([], dtype=np.float32)
+                            
+                            # Also clear any queued audio chunks
+                            while not self.transcriber.audio_queue.empty():
+                                try:
+                                    self.transcriber.audio_queue.get_nowait()
+                                except queue.Empty:
+                                    break
+                        
+                        time.sleep(0.1)
+                        continue
                     
-                    # Only process if we have new transcription
-                    if current_transcription and current_transcription != last_transcription:
-                        # Process the transcription
-                        processed_text = self.processor.process(current_transcription)
+                    # Get the current audio for analysis (if accessible in your implementation)
+                    if hasattr(self.transcriber, 'audio_buffer'):
+                        with self.transcriber.transcription_lock:
+                            # Make a copy to avoid thread issues
+                            current_audio = np.copy(self.transcriber.audio_buffer) 
                         
-                        if processed_text:
-                            # Put the processed text in the output queue
-                            self.output_queue.put(processed_text)
-                            logger.debug(f"Transcribed: {processed_text}")
-                        
-                        last_transcription = current_transcription
+                        # Check if audio contains human voice
+                        if len(current_audio) > 0 and self.audio_analyzer.is_human_voice(current_audio):
+                            # Process transcription only for human voice
+                            current_transcription = self.transcriber.get_transcription()["text"]
+                            
+                            # Only process if we have new transcription with decent confidence
+                            if (current_transcription and 
+                                current_transcription != last_transcription and
+                                self.transcriber.get_transcription()["confidence"] > 0.4):
+                                
+                                # Process the transcription
+                                processed_text = self.processor.process(current_transcription)
+                                
+                                if processed_text:
+                                    # Put the processed text in the output queue
+                                    self.output_queue.put(processed_text)
+                                    logger.debug(f"Transcribed: {processed_text}")
+                                
+                                last_transcription = current_transcription
+                except Exception as e:
+                    logger.error(f"Error in transcription processing: {e}")
                 
                 # Sleep to avoid tight loops
                 time.sleep(0.1)
@@ -424,6 +574,7 @@ class TranscriptionWorker:
             except:
                 pass
             logger.info("Transcription worker stopped")
+
 
 class AddressingWorker:
     """
@@ -476,6 +627,11 @@ class AddressingWorker:
             
             # Main processing loop
             while self.running and self.state_manager.system_active:
+                # Skip processing during audio suppression
+                if self.state_manager.ai_is_speaking or self.state_manager.audio_suppression_active:
+                    time.sleep(0.1)
+                    continue
+                
                 # Process any new transcriptions
                 try:
                     while not self.transcription_queue.empty():
@@ -534,6 +690,7 @@ class AddressingWorker:
             logger.error(f"Error in addressing worker: {e}")
             traceback.print_exc()
 
+
 class ResponseWorker:
     """
     Worker thread for generating and speaking AI responses
@@ -544,12 +701,14 @@ class ResponseWorker:
         state_manager: StateManager,
         addressing_queue: queue.Queue,
         response_generator: ResponseGenerator,
-        speech_synthesizer: SpeechSynthesizer
+        speech_synthesizer: SpeechSynthesizer,
+        transcription_worker: 'TranscriptionWorker'  # For direct buffer access
     ):
         self.state_manager = state_manager
         self.addressing_queue = addressing_queue
         self.response_generator = response_generator
         self.speech_synthesizer = speech_synthesizer
+        self.transcription_worker = transcription_worker
         self.running = False
         self.thread = None
     
@@ -585,17 +744,38 @@ class ResponseWorker:
                     
                     # Generate a response if we got a context
                     if context:
-                        # Temporarily pause transcription while generating and speaking
+                        # IMPORTANT: Establish audio silence before generating
+                        # Set flags to stop audio processing
                         self.state_manager.pause_transcription = True
                         
-                        # Generate the response
+                        # Make sure we clear any pending audio from the transcription buffer
+                        # This is crucial to prevent the system from hearing itself
+                        if hasattr(self.transcription_worker, 'transcriber'):
+                            with self.transcription_worker.transcriber.transcription_lock:
+                                self.transcription_worker.transcriber.audio_buffer = np.array([], dtype=np.float32)
+                                # Clear queue
+                                while not self.transcription_worker.transcriber.audio_queue.empty():
+                                    try:
+                                        self.transcription_worker.transcriber.audio_queue.get_nowait()
+                                    except queue.Empty:
+                                        break
+                        
+                        # Small delay to ensure transcription is fully paused
+                        time.sleep(0.2)
+                        
+                        # Generate the response - this sets ai_is_speaking to True
                         response = self.response_generator.generate(context)
                         
                         # Speak the response
                         if response:
+                            # The state_manager.ai_is_speaking is already True from the generator
                             self.speech_synthesizer.speak(response)
+                            
+                            # Add a small delay after speech completion
+                            time.sleep(0.5)
                         
-                        # Resume transcription
+                        # Resume transcription - audio_suppression_active will remain
+                        # true for a short cooldown period managed by StateManager
                         self.state_manager.pause_transcription = False
                         
                 except Exception as e:
@@ -609,6 +789,7 @@ class ResponseWorker:
             traceback.print_exc()
         finally:
             logger.info("Response worker stopped")
+
 
 class ASDWorker:
     """
@@ -650,6 +831,7 @@ class ASDWorker:
         finally:
             logger.info("ASD worker stopped")
 
+
 ###################
 # Main Application
 ###################
@@ -668,17 +850,19 @@ class SpeakSense:
         self.state_manager = StateManager()
         self.context_manager = ContextManager()
         self.conversation_manager = ConversationManager(self.state_manager)
+        self.audio_analyzer = AudioAnalyzer(self.state_manager)
         
         # Create processing components
         self.transcription_processor = TranscriptionProcessor()
         self.response_generator = ResponseGenerator(self.state_manager)
         self.speech_synthesizer = SpeechSynthesizer()
         
-        # Create worker threads
+        # Create worker threads (note the circular dependency handled in a clean way)
         self.transcription_worker = TranscriptionWorker(
             self.state_manager,
             self.transcription_queue,
-            self.transcription_processor
+            self.transcription_processor,
+            self.audio_analyzer
         )
         
         self.addressing_worker = AddressingWorker(
@@ -689,11 +873,13 @@ class SpeakSense:
             self.addressing_queue
         )
         
+        # Create response worker with transcription_worker reference for buffer access
         self.response_worker = ResponseWorker(
             self.state_manager,
             self.addressing_queue,
             self.response_generator,
-            self.speech_synthesizer
+            self.speech_synthesizer,
+            self.transcription_worker  # Pass reference for direct buffer clearing
         )
         
         self.asd_worker = ASDWorker(self.state_manager)
@@ -741,6 +927,413 @@ class SpeakSense:
         self.asd_worker.stop()
         
         logger.info("SpeakSense system stopped")
+
+###################
+# Modified WhisperRealtimeTranscriber
+###################
+
+class WhisperRealtimeTranscriber:
+    """
+    Real-time audio transcription using OpenAI's Whisper model.
+    Features:
+    - Dynamic silence detection
+    - Efficient buffering
+    - Smart segmentation
+    - Non-blocking transcription
+    - Confidence scoring
+    - Resource management
+    """
+    
+    def __init__(
+        self, 
+        model_name="openai/whisper-tiny", 
+        device=None, 
+        optimize=True,
+        sample_rate=16000
+    ):
+        """
+        Initialize the transcriber with the specified model and settings
+        
+        Args:
+            model_name (str): Whisper model name/path
+            device (str): Device to use ('cuda', 'cpu', etc.)
+            optimize (bool): Whether to optimize model for inference
+            sample_rate (int): Audio sample rate in Hz
+        """
+        # Import necessary libraries here to avoid circular imports
+        import torch
+        import numpy as np
+        import pyaudio
+        import threading
+        import queue
+        import time
+        import os
+        import logging
+        from transformers import WhisperProcessor, WhisperForConditionalGeneration
+        
+        # Set up logging
+        self.logger = logging.getLogger("WhisperTranscriber")
+        
+        # Set device to CUDA if available
+        self.device = device if device else ("cuda" if torch.cuda.is_available() else "cpu")
+        self.logger.info(f"Using device: {self.device}")
+        
+        # Load Whisper model and processor
+        self.logger.info(f"Loading Whisper model: {model_name}")
+        try:
+            self.processor = WhisperProcessor.from_pretrained(model_name)
+            self.model = WhisperForConditionalGeneration.from_pretrained(model_name).to(self.device)
+            
+            # Set model to English-only for better performance
+            self.model.config.forced_decoder_ids = self.processor.get_decoder_prompt_ids(
+                language="en",  # Explicitly specify English
+                task="transcribe"
+            )
+            
+            # Optimize model if requested and on GPU
+            if optimize and self.device == "cuda":
+                self.model = self.model.half()  # Use FP16 for faster inference
+                self.logger.info("Using half precision (FP16) for faster inference")
+                
+            self.logger.info("Model loaded successfully")
+        except Exception as e:
+            self.logger.error(f"Error loading model: {e}")
+            raise
+        
+        # Audio configurations
+        self.sample_rate = sample_rate
+        self.chunk_size = 4000
+        self.audio_format = pyaudio.paInt16
+        self.channels = 1
+        
+        # Initialize PyAudio
+        try:
+            self.audio_interface = pyaudio.PyAudio()
+        except Exception as e:
+            self.logger.error(f"Error initializing PyAudio: {e}")
+            raise
+        
+        # Create a queue for audio chunks
+        self.audio_queue = queue.Queue()
+        
+        # Tracking for continuous transcription
+        self.is_running = False
+        self.stream = None
+        self.processing_thread = None
+        self.transcription_lock = threading.Lock()
+        
+        # Audio buffer and state
+        self.audio_buffer = np.array([], dtype=np.float32)
+        self.buffer_max_size = self.sample_rate * 30  # 30 seconds max
+        self.last_transcription = ""
+        self.last_confidence = 0.0
+        self.last_timestamps = None
+        
+        # Silence detection settings
+        self.base_silence_threshold = 0.01
+        self.silence_threshold = self.base_silence_threshold
+        self.silence_counter = 0
+        self.max_silence_chunks = 8  # About 2 seconds of silence
+        
+        # Dynamic threshold calibration
+        self.calibration_samples = []
+        self.calibration_period = 100  # Calibrate every 100 chunks
+        self.calibration_counter = 0
+        
+        # Performance metrics
+        self.transcription_count = 0
+        self.total_processing_time = 0
+        self.total_audio_duration = 0
+    
+    def start_listening(self):
+        """Start capturing audio from microphone"""
+        if self.is_running:
+            self.logger.warning("Already listening")
+            return
+            
+        try:
+            self.stream = self.audio_interface.open(
+                format=self.audio_format,
+                channels=self.channels,
+                rate=self.sample_rate,
+                input=True,
+                frames_per_buffer=self.chunk_size,
+                stream_callback=self._audio_callback
+            )
+            
+            self.is_running = True
+            self.stream.start_stream()
+            self.logger.info("Audio capture started - listening to microphone")
+        except Exception as e:
+            self.logger.error(f"Error starting audio stream: {e}")
+            self.stop()
+            raise
+    
+    def _audio_callback(self, in_data, frame_count, time_info, status):
+        """Callback function for audio stream"""
+        if status:
+            self.logger.debug(f"Audio callback status: {status}")
+            
+        self.audio_queue.put(in_data)
+        return (in_data, pyaudio.paContinue)
+    
+    def _calibrate_silence_threshold(self, audio_level):
+        """Dynamically adjust silence threshold based on ambient noise"""
+        self.calibration_samples.append(audio_level)
+        self.calibration_counter += 1
+        
+        # Recalibrate periodically
+        if self.calibration_counter >= self.calibration_period:
+            if len(self.calibration_samples) > 10:  # Need enough samples
+                # Use a low percentile as baseline noise level
+                noise_level = np.percentile(self.calibration_samples, 10)
+                # Set threshold to be slightly above the noise level
+                self.silence_threshold = max(self.base_silence_threshold, noise_level * 1.5)
+                self.logger.debug(f"Recalibrated silence threshold to {self.silence_threshold:.5f}")
+                
+            # Reset calibration state
+            self.calibration_samples = self.calibration_samples[-10:]  # Keep some history
+            self.calibration_counter = 0
+    
+    def _process_audio(self):
+        """Process audio chunks from the queue and manage transcription"""
+        self.logger.info("Audio processing thread started")
+        last_transcription_time = time.time()
+        
+        while self.is_running:
+            try:
+                # Process multiple chunks at once to reduce overhead
+                chunks = []
+                try:
+                    # Wait for at least one chunk but don't block too long
+                    first_chunk = self.audio_queue.get(timeout=0.5)
+                    chunks.append(first_chunk)
+                    
+                    # Get any additional chunks that are ready (up to 10)
+                    for _ in range(9):  # Max 10 chunks total
+                        if self.audio_queue.empty():
+                            break
+                        chunks.append(self.audio_queue.get_nowait())
+                except queue.Empty:
+                    # No chunks available, wait and try again
+                    time.sleep(0.1)
+                    continue
+                
+                if chunks:
+                    # Convert all chunks at once for efficiency
+                    audio_data = b''.join(chunks)
+                    audio_np = np.frombuffer(audio_data, dtype=np.int16).astype(np.float32) / 32768.0
+                    
+                    # Calculate audio level for this segment
+                    audio_level = np.abs(audio_np).mean()
+                    
+                    # Calibrate silence threshold
+                    self._calibrate_silence_threshold(audio_level)
+                    
+                    # Check for silence
+                    is_silent = audio_level < self.silence_threshold
+                    
+                    if is_silent:
+                        self.silence_counter += 1
+                        self.logger.debug(f"Silence detected ({self.silence_counter}/{self.max_silence_chunks})")
+                    else:
+                        if self.silence_counter > 0:
+                            self.logger.debug("Audio activity resumed")
+                        self.silence_counter = 0
+                    
+                    # Add to buffer
+                    self.audio_buffer = np.append(self.audio_buffer, audio_np)
+                    
+                    # Enforce maximum buffer size (circular buffer approach)
+                    if len(self.audio_buffer) > self.buffer_max_size:
+                        # Keep most recent audio up to buffer_max_size
+                        self.audio_buffer = self.audio_buffer[-self.buffer_max_size:]
+                    
+                    # Check if we should transcribe
+                    current_time = time.time()
+                    buffer_duration = len(self.audio_buffer) / self.sample_rate
+                    time_since_last = current_time - last_transcription_time
+                    
+                    # Transcription triggers:
+                    # 1. Significant silence after speech (end of utterance)
+                    # 2. Buffer getting large (ongoing speech)
+                    # 3. Minimum time since last transcription (avoid too frequent)
+                    significant_silence = (
+                        self.silence_counter >= self.max_silence_chunks and 
+                        buffer_duration > 1.0
+                    )
+                    buffer_full = buffer_duration >= 5.0
+                    time_threshold = time_since_last >= 3.0 and buffer_duration >= 1.0
+                    
+                    if (significant_silence or buffer_full or time_threshold) and buffer_duration > 0.5:
+                        # Launch transcription in a separate thread to avoid blocking
+                        threading.Thread(
+                            target=self._transcribe_buffer,
+                            daemon=True
+                        ).start()
+                        
+                        last_transcription_time = current_time
+            
+            except Exception as e:
+                self.logger.error(f"Error in audio processing: {e}")
+                time.sleep(0.1)  # Avoid tight loop on error
+    
+    def _transcribe_buffer(self):
+        """Transcribe the current audio buffer"""
+        # Import torch dynamically
+        import torch
+        import traceback
+        import numpy as np
+        
+        # Make a copy of the buffer to allow concurrent processing
+        with self.transcription_lock:
+            audio_to_process = np.copy(self.audio_buffer)
+            
+            # If significant silence, keep a small portion for context in next transcription
+            if self.silence_counter >= self.max_silence_chunks:
+                # Keep a small portion for context
+                self.audio_buffer = self.audio_buffer[-int(self.sample_rate * 0.5):]
+                self.silence_counter = 0
+            else:
+                # For continuous speech, keep more context
+                self.audio_buffer = self.audio_buffer[-int(self.sample_rate * 2):]
+        
+        # Skip if buffer is too small
+        if len(audio_to_process) < self.sample_rate * 0.5:  # At least 0.5 seconds
+            self.logger.debug("Buffer too small, skipping transcription")
+            return
+        
+        try:
+            # Measure transcription performance
+            start_time = time.time()
+            buffer_duration = len(audio_to_process) / self.sample_rate
+            
+            # Process audio for Whisper input
+            processed_features = self.processor(
+                audio_to_process, 
+                sampling_rate=self.sample_rate, 
+                return_tensors="pt"
+            )
+            
+            # Get input features and move to device - handle both possible return types
+            if hasattr(processed_features, "input_features"):
+                input_features = processed_features.input_features
+            elif isinstance(processed_features, dict) and "input_features" in processed_features:
+                input_features = processed_features["input_features"]
+            else:
+                self.logger.error(f"Unexpected processor output format: {type(processed_features)}")
+                self.logger.debug(f"Processor output keys: {processed_features.keys() if hasattr(processed_features, 'keys') else 'no keys'}")
+                return
+            
+            # Move to device
+            input_features = input_features.to(self.device)
+            
+            # Convert to half precision if model is in half precision
+            if self.device == "cuda" and hasattr(self.model, 'dtype') and self.model.dtype == torch.float16:
+                input_features = input_features.half()
+            
+            # Generate with proper settings
+            with torch.no_grad():
+                outputs = self.model.generate(
+                    input_features,
+                    max_length=448,
+                    return_dict_in_generate=True,
+                    output_scores=True
+                )
+            
+            # Decode the tokens to text
+            transcription = self.processor.batch_decode(
+                outputs.sequences, 
+                skip_special_tokens=True
+            )[0]
+            
+            # Calculate confidence score (average of token probabilities)
+            try:
+                # Get best token probability at each step
+                best_token_probs = []
+                for score_set in outputs.scores:
+                    token_probs = torch.softmax(score_set, dim=-1)
+                    best_probs = torch.max(token_probs, dim=-1).values
+                    best_token_probs.extend(best_probs.cpu().numpy())
+                
+                # Average as confidence score
+                confidence = float(np.mean(best_token_probs)) if best_token_probs else 0.0
+            except Exception as e:
+                self.logger.warning(f"Error calculating confidence: {e}")
+                confidence = 0.0
+            
+            # Update transcription results
+            with self.transcription_lock:
+                self.last_transcription = transcription
+                self.last_confidence = confidence
+            
+            # Performance metrics
+            elapsed = time.time() - start_time
+            self.transcription_count += 1
+            self.total_processing_time += elapsed
+            self.total_audio_duration += buffer_duration
+            
+            # Log transcription results
+            self.logger.info(
+                f"Transcribed {buffer_duration:.1f}s audio in {elapsed:.2f}s "
+                f"(conf: {confidence:.2f}): {transcription}"
+            )
+            
+            # Optional: Write to file
+            with open("transcription.txt", "a") as f:
+                f.write(f"{transcription}->{confidence:.2f}\n")
+                
+        except Exception as e:
+            self.logger.error(f"Error in transcription: {e}")
+            self.logger.error(f"Error details: {traceback.format_exc()}")
+    
+    def start_transcribing(self):
+        """Start the transcription process"""
+        if self.processing_thread is not None and self.processing_thread.is_alive():
+            self.logger.warning("Transcription already running")
+            return
+            
+        self.processing_thread = threading.Thread(target=self._process_audio)
+        self.processing_thread.daemon = True
+        self.processing_thread.start()
+        self.logger.info("Transcription processing started")
+    
+    def get_transcription(self):
+        """Get the latest transcription with metadata"""
+        with self.transcription_lock:
+            return {
+                "text": self.last_transcription,
+                "confidence": self.last_confidence
+            }
+    
+    def stop(self):
+        """Stop the transcription process with proper cleanup"""
+        if not self.is_running:
+            return
+            
+        self.logger.info("Stopping transcription...")
+        self.is_running = False
+        
+        # Wait for processing thread to finish
+        if self.processing_thread and self.processing_thread.is_alive():
+            self.processing_thread.join(timeout=2.0)
+        
+        # Clean up PyAudio resources
+        if self.stream and self.stream.is_active():
+            self.stream.stop_stream()
+            self.stream.close()
+            self.stream = None
+        
+        if self.audio_interface:
+            self.audio_interface.terminate()
+            self.audio_interface = None
+        
+        self.logger.info("Transcription stopped and resources cleaned up")
+    
+    def __del__(self):
+        """Destructor to ensure resources are properly cleaned up"""
+        self.stop()
+        
 
 if __name__ == "__main__":
     # Create and start the SpeakSense system
