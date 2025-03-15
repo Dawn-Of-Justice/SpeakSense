@@ -2,8 +2,6 @@ import threading
 import time
 import queue
 import traceback
-import sys
-import importlib
 from Live_transcription.OnlineTranscription import RealtimeTranscriber
 from Live_transcription.Transcription import WhisperRealtimeTranscriber
 from audio_model.Classifier import AddressClassifier
