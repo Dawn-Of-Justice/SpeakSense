@@ -55,3 +55,4 @@ tzdata==2024.2
 urllib3==2.3.0
 websockets==14.1
 PyAudio==0.2.14
+PyQt5
