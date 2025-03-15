@@ -142,10 +142,11 @@ if __name__ == "__main__":
         "Hey robot, what's the weather today?",
         "I need to finish my homework soon.",
         "Robot, can you help me with this?",
-        "The meeting starts at 2 PM."
+        "The meeting starts at 2 PM.",
+        "So, yeah this is actually a test for this way, but test for this weight burden detection. It is not a weight burden detection system."
     ]
     
-    classifier = AddressClassifierPt()
+    classifier = AddressClassifier()
     
     
     for text in test_examples:

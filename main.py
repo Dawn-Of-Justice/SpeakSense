@@ -55,6 +55,10 @@ def transcription_thread():
                         clear_state = False
                         print(f"Cleared Context: {transcriber.last_transcription}")
                     if transcriber.last_transcription:
+                        hallucinated_words = ["See you next time", "!", "Thank you for watching", "thank you", "?"]
+                        for word in hallucinated_words:
+                            if word in transcriber.last_transcription:
+                                transcriber.last_transcription = transcriber.last_transcription.replace(word, "")
                         transcribed_stuff = transcriber.last_transcription
                 time.sleep(0.1)
             

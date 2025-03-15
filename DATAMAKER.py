@@ -2,6 +2,14 @@ import os
 from groq import Groq
 from datetime import datetime
 import json
+import time
+
+system_prompt = "You are an AI assistant tasked with generating synthetic training data for an addressing classifier model. This model will determine whether speech is addressed to an AI assistant or not, replacing traditional wake word detection. \n\nYour task is to generate realistic speech samples that might occur in real-time conversations, including:\n1. Complete sentences (some addressed to AI, some not)\n2. Cut-off or incomplete sentences\n3. Short addressing phrases\n4. Sentences with occasional transcription errors or hallucinated words\n\nEach generated sample should be clearly follow the format\n\nADDRESSING SAMPLES should include:\n- Questions or statements clearly directed at an AI assistant\n- Phrases that seek information, opinions, or actions from the AI\n- Direct addresses that may or may not include \"hey\", \"hi\", or similar greetings\n- May include cut-off beginnings or endings as would occur in real-time transcription\n\nNOT ADDRESSING SAMPLES should include:\n- People talking to each other, not to the AI\n- Statements or questions that are part of a human-to-human conversation\n- Ambient speech not directed at any particular entity\n- May include cut-off beginnings or endings as would occur in real-time transcription\n\nFORMAT:\nSample1: [generated text sample]\nSample2: [generated text sample]\nSample3: [generated text sample]\n...\n\nEXAMPLES:\n\nADDRESSING:\n- Hey what's the weather going to be like tomorrow\n- The HR department is looking to update the employee handbook Could you help by compiling all the necessary information and drafting the new version of the handbook It would be great if you could also gather feedback from the employees to ensure the handbook is comprehensive and useful\n- I was reading about the future of AI in the workplace Do you think AI will replace human jobs\n- What do you think about the latest movie releases\n- Tell me about the history of artificial intelligence\n- Do you know how to make a good pasta sauce\n\nNOT ADDRESSING:\n- Ive been learning more about photography lately and its fascinating how a single photo can tell a whole story Ive been experimenting with different angles and lighting and its exciting to see how the same scene can look so different based on how you capture it\n-My sister called me yesterday to tell me about her new job She started working at a tech company and shes excited about the opportunities there She mentioned they have a great team and are developing some innovative software\n- Its been a while since we visited the museum I remember the last time we went we spent hours looking at the art exhibits Maybe we should plan a visit for this weekend Ive been wanting to see the new Picasso collection they just acquired\n- so you're doing this and yeah maybe if its done\n- I really enjoyed that book you recommended last week\n- My car needs to be taken in for service soon\n- C.C.C.C C.C.C.C C.C.C.C blurble\n\nADDITIONAL INSTRUCTIONS:\n- Include some samples with cut-off text (e.g., \"so you're doing this and yeah maybe if its done\")\n- Include some short addressing phrases (e.g., \"Hey\", \"Hi there\", \"Excuse me\")\n- Include some samples with nonsensical or hallucinated words (e.g., \"C.C.C.C\", \"blurble\")\n- Create a mix of formal and informal language styles\n- Include samples from various topics (technology, entertainment, daily life, etc.)\n- Ensure a balanced distribution of addressing and non-addressing samples"
+
+prompt = "Generate 100 token long 20 samples of Addressing, this should be the worst case scenario like samples which might come in live transcriptions, always address at the end only, don't use can you, what do you think, say something else"
+#  don't follow the same pattern of conversation given to u in the addressing examples, make new ones, diverse ones
+
+
 
 class GroqGenerator:
     def __init__(self, api_key=None, output_dir="groq_outputs"):
@@ -13,6 +21,7 @@ class GroqGenerator:
             output_dir (str): Directory to save output files
         """
         # Use provided API key or fall back to environment variable
+        # self.api_key = api_key
         self.api_key = api_key if api_key else os.environ.get("GROK_API_KEY")
         if not self.api_key:
             raise ValueError("GROQ_API_KEY not provided and not found in environment variables")
@@ -25,7 +34,7 @@ class GroqGenerator:
             os.makedirs(output_dir)
             
         # Default model - can be changed via method
-        self.model = "qwen-2.5-32b"
+        self.model = "llama-3.3-70b-versatile"
         
     def generate_response(self, prompt, system_message=None, max_tokens=1000):
         """
@@ -50,9 +59,10 @@ class GroqGenerator:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
-                temperature=0.7,
-                max_completion_tokens=2810,
+                temperature=1,
+                max_completion_tokens=1024,
                 top_p=1,
+                stop=None,
             )
                         
             return response.choices[0].message.content
@@ -147,8 +157,8 @@ if __name__ == "__main__":
                 # system_message ="""
                 # You are an assistant who generates the samples for training a model that classifies whether a sentence spoken by a human addresses the robot or not.
                 # Your samples should be diverse, natural, realistic, and unique. Use different forms of addressing, and also the sentences should be meaningful with some good length."""
-                prompt = """so for now generate sample of addressing samples, I need samples having lengths of 100 tokens, use sample1:, sample2: for each individual samples so that it can be extracted easily extracted using regex algo, but please don't use **sample1:**,**sample2:** etc,  and to make the data diverse I want you to give random new new topics, for every sample, and also feel free to divert from the "We've been " and 'So we've been pattern", each sentence should be different an new""",
-                system_message = """You are an AI bot who helps to make Synthetic data, so your todays task is to generate data like the below examples,\n\nNon-Addressing:\n\"We’ve been discussing the latest breakthroughs in quantum computing. Hey , what do you think about the potential applications of quantum computers?\nYeah, quantum computing is an interesting topic. \"\n\nwhich is analogues to,\n\nUser: \"We’ve been discussing the latest breakthroughs in quantum computing. Hey Robot, what do you think about the potential applications of quantum computers?\" \nAI: \"Yeah, quantum computing is an interesting topic.\"\n\nAddressing:\n\n1.) We’ve been discussing the latest breakthroughs in quantum computing. Hey , what do you think about the potential applications of quantum computers?\nYeah, quantum computing is an interesting topic. What do you wanna know about it? I actually wanna know how this helps current security systems?\n\nwhich is analogues to,\n\nUser: \"We’ve been discussing the latest breakthroughs in quantum computing. Hey Robot, what do you think about the potential applications of quantum computers?\" \nAI: \"Yeah, quantum computing is an interesting topic. What do you wanna know about it? User: I actually wanna know how this helps current security systems?\"\n\n\n2.) So we've been discussing the best scifi movies of all time, do you have a favorite\nwhich is analogues to,\n\nUser: \"So we've been discussing the best scifi movies of all time, do you have a favorite\" \n\n3.) So we've been discussing the best scifi movies of all time do you have a favorite yes I do my favourite would be interstellar oh thats great why is that your favourite\nwhich is analogues to,\n\nUser: \"So we've been discussing the best scifi movies of all time, do you have a favorite AI: \"yes I do my favourite would be interstellar\" User: \"oh thats great why is that your favourite\" \n\nSo this are data samples which are used by a classifier model which predicts if it is addressed or not addressed based on the context, I don't want the analogues to example, I want the one with no 'User:' and 'AI:' tag"""
+                prompt = prompt,
+                system_message = system_prompt
 
             )
             
@@ -164,7 +174,7 @@ if __name__ == "__main__":
                 samples = generator.split_for_training(filepath)
                 # print(f"\nGenerated {len(samples)} training samples for: {prompt}")
                 # print(f"First sample: {samples[0][:100]}...")
-                
+            time.sleep(2)
         except ValueError as e:
             print(f"Error: {str(e)}")
         except Exception as e:
