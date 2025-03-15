@@ -423,15 +423,37 @@ class SpeechSynthesizer:
     Converts text to speech and plays it
     """
     
-    def __init__(self, voice_id: int = 1, rate: int = 140):
+    def __init__(self, voice_id: int = 1, rate: int = 140, transcription_worker=None):
         self.voice_id = voice_id
         self.rate = rate
         self.temp_file = "temp_speech.wav"
+        self.transcription_worker = transcription_worker 
     
     def speak(self, text: str):
-        """Convert text to speech and play it"""
+        """
+        Convert text to speech and play it with complete audio isolation
+        to prevent the system from hearing itself.
+        """
         try:
-            # Initialize the TTS engine
+            # 1. Store reference to the transcription worker's audio stream
+            transcriber = self.transcription_worker.transcriber
+            
+            # 2. COMPLETELY STOP the audio stream before TTS
+            if hasattr(transcriber, 'stream') and transcriber.stream and transcriber.stream.is_active():
+                logger.info("Stopping audio stream for TTS playback")
+                transcriber.stream.stop_stream()
+            
+            # 3. Clear all buffers and queues
+            with transcriber.transcription_lock:
+                transcriber.audio_buffer = np.array([], dtype=np.float32)
+                # Clear the audio queue
+                while not transcriber.audio_queue.empty():
+                    try:
+                        transcriber.audio_queue.get_nowait()
+                    except queue.Empty:
+                        break
+            
+            # 4. Initialize the TTS engine
             engine = pyttsx3.init()
             engine.setProperty("rate", self.rate)
             
@@ -440,12 +462,23 @@ class SpeechSynthesizer:
             if len(voices) > self.voice_id:
                 engine.setProperty("voice", voices[self.voice_id].id)
             
-            # Save to file and play
+            # 5. Generate and save TTS audio
+            logger.info(f"Generating TTS for: {text}")
             engine.save_to_file(text, self.temp_file)
             engine.runAndWait()
             
-            # Play the audio
+            # 6. Play the audio while microphone is stopped
+            logger.info("Playing TTS audio with microphone muted")
             playsound.playsound(self.temp_file)
+            
+            # 7. Add a significant delay before resuming audio capture
+            time.sleep(0.5)
+            
+            # 8. RESTART the audio stream
+            if hasattr(transcriber, 'stream'):
+                logger.info("Restarting audio stream after TTS")
+                if not transcriber.stream.is_active():
+                    transcriber.stream.start_stream()
             
             # Clean up the file
             if os.path.exists(self.temp_file):
@@ -453,9 +486,18 @@ class SpeechSynthesizer:
                     os.remove(self.temp_file)
                 except:
                     pass
-                
+                    
         except Exception as e:
             logger.error(f"Error in speech synthesis: {e}")
+            logger.error(traceback.format_exc())
+            
+            # Ensure the audio stream is restarted even on error
+            try:
+                transcriber = self.transcription_worker.transcriber
+                if hasattr(transcriber, 'stream') and transcriber.stream and not transcriber.stream.is_active():
+                    transcriber.stream.start_stream()
+            except:
+                pass
 
 
 ###################
@@ -494,6 +536,16 @@ class TranscriptionWorker:
         self.running = True
         self.thread = threading.Thread(target=self._run, daemon=True)
         self.thread.start()
+
+    def restart_audio_stream(self):
+        """Restart the audio stream after it has been stopped"""
+        if hasattr(self.transcriber, 'stream') and self.transcriber.stream:
+            if not self.transcriber.stream.is_active():
+                try:
+                    self.transcriber.stream.start_stream()
+                    logger.info("Audio stream restarted")
+                except Exception as e:
+                    logger.error(f"Error restarting audio stream: {e}")
     
     def stop(self):
         """Stop the transcription worker thread"""
@@ -744,52 +796,43 @@ class ResponseWorker:
                     
                     # Generate a response if we got a context
                     if context:
-                        # IMPORTANT: Establish audio silence before generating
-                        # Set flags to stop audio processing
+                        # Set flags to prevent audio processing
                         self.state_manager.pause_transcription = True
+                        self.state_manager.ai_is_speaking = True
                         
-                        # Make sure we clear any pending audio from the transcription buffer
-                        # This is crucial to prevent the system from hearing itself
-                        if hasattr(self.transcription_worker, 'transcriber'):
-                            with self.transcription_worker.transcriber.transcription_lock:
-                                self.transcription_worker.transcriber.audio_buffer = np.array([], dtype=np.float32)
-                                # Clear queue
-                                while not self.transcription_worker.transcriber.audio_queue.empty():
-                                    try:
-                                        self.transcription_worker.transcriber.audio_queue.get_nowait()
-                                    except queue.Empty:
-                                        break
+                        # Small delay to ensure state changes propagate
+                        time.sleep(0.1)
                         
-                        # Small delay to ensure transcription is fully paused
-                        time.sleep(0.2)
-                        
-                        # Generate the response - this sets ai_is_speaking to True
+                        # Generate the response
                         response = self.response_generator.generate(context)
                         
-                        # Speak the response
+                        # Speak the response - this will now handle stopping and restarting the audio stream
                         if response:
-                            # The state_manager.ai_is_speaking is already True from the generator
                             self.speech_synthesizer.speak(response)
-                            
-                            # Add a small delay after speech completion
-                            time.sleep(0.5)
                         
-                        # Resume transcription - audio_suppression_active will remain
-                        # true for a short cooldown period managed by StateManager
+                        # Resume normal state - the speak method now handles restarting the audio stream
+                        self.state_manager.ai_is_speaking = False
                         self.state_manager.pause_transcription = False
+                        
+                        # Ensure we're back to clean state before processing next input
+                        time.sleep(1.0)
                         
                 except Exception as e:
                     logger.error(f"Error processing response: {e}")
-                
+                    logger.error(traceback.format_exc())
+                    
+                    # Ensure audio stream is restarted on error
+                    self.state_manager.ai_is_speaking = False
+                    self.state_manager.pause_transcription = False
+                    
                 # Small sleep to avoid tight loops
                 time.sleep(0.1)
-                
+                    
         except Exception as e:
             logger.error(f"Error in response worker: {e}")
             traceback.print_exc()
         finally:
             logger.info("Response worker stopped")
-
 
 class ASDWorker:
     """
@@ -855,7 +898,6 @@ class SpeakSense:
         # Create processing components
         self.transcription_processor = TranscriptionProcessor()
         self.response_generator = ResponseGenerator(self.state_manager)
-        self.speech_synthesizer = SpeechSynthesizer()
         
         # Create worker threads (note the circular dependency handled in a clean way)
         self.transcription_worker = TranscriptionWorker(
@@ -863,6 +905,10 @@ class SpeakSense:
             self.transcription_queue,
             self.transcription_processor,
             self.audio_analyzer
+        )
+
+        self.speech_synthesizer = SpeechSynthesizer(
+            transcription_worker=self.transcription_worker
         )
         
         self.addressing_worker = AddressingWorker(
