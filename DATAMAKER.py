@@ -50,11 +50,11 @@ class GroqGenerator:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
-                temperature=0.74,
-                max_completion_tokens=4790,
-                top_p=0.95,
+                temperature=0.7,
+                max_completion_tokens=2810,
+                top_p=1,
             )
-            
+                        
             return response.choices[0].message.content
         except Exception as e:
             print(f"Error generating response: {str(e)}")
@@ -147,13 +147,8 @@ if __name__ == "__main__":
                 # system_message ="""
                 # You are an assistant who generates the samples for training a model that classifies whether a sentence spoken by a human addresses the robot or not.
                 # Your samples should be diverse, natural, realistic, and unique. Use different forms of addressing, and also the sentences should be meaningful with some good length."""
-                prompt = """Generate the samples that are not addressing the robot. Follow the format strictly. Format is given below.
-                            "Sample1: <text min 500 words>"
-                            Need to make samples that are not addressing the robot.
-                            Make at least 20 Samples.Do not include anything other than the format given above.
-                            Also reduce the use of same starting words try to create different cases.""",
-                system_message = """You are an assistant who generates the samples for training a model that classifies whether a sentence spoken by a human addresses the robot or not.
-                                    Your samples should be diverse, natural, realistic, and unique. Use different forms of addressing, and also the sentences should be meaningful with some good length."""
+                prompt = """so for now generate sample of addressing samples, I need samples having lengths of 100 tokens, use sample1:, sample2: for each individual samples so that it can be extracted easily extracted using regex algo, but please don't use **sample1:**,**sample2:** etc,  and to make the data diverse I want you to give random new new topics, for every sample, and also feel free to divert from the "We've been " and 'So we've been pattern", each sentence should be different an new""",
+                system_message = """You are an AI bot who helps to make Synthetic data, so your todays task is to generate data like the below examples,\n\nNon-Addressing:\n\"We’ve been discussing the latest breakthroughs in quantum computing. Hey , what do you think about the potential applications of quantum computers?\nYeah, quantum computing is an interesting topic. \"\n\nwhich is analogues to,\n\nUser: \"We’ve been discussing the latest breakthroughs in quantum computing. Hey Robot, what do you think about the potential applications of quantum computers?\" \nAI: \"Yeah, quantum computing is an interesting topic.\"\n\nAddressing:\n\n1.) We’ve been discussing the latest breakthroughs in quantum computing. Hey , what do you think about the potential applications of quantum computers?\nYeah, quantum computing is an interesting topic. What do you wanna know about it? I actually wanna know how this helps current security systems?\n\nwhich is analogues to,\n\nUser: \"We’ve been discussing the latest breakthroughs in quantum computing. Hey Robot, what do you think about the potential applications of quantum computers?\" \nAI: \"Yeah, quantum computing is an interesting topic. What do you wanna know about it? User: I actually wanna know how this helps current security systems?\"\n\n\n2.) So we've been discussing the best scifi movies of all time, do you have a favorite\nwhich is analogues to,\n\nUser: \"So we've been discussing the best scifi movies of all time, do you have a favorite\" \n\n3.) So we've been discussing the best scifi movies of all time do you have a favorite yes I do my favourite would be interstellar oh thats great why is that your favourite\nwhich is analogues to,\n\nUser: \"So we've been discussing the best scifi movies of all time, do you have a favorite AI: \"yes I do my favourite would be interstellar\" User: \"oh thats great why is that your favourite\" \n\nSo this are data samples which are used by a classifier model which predicts if it is addressed or not addressed based on the context, I don't want the analogues to example, I want the one with no 'User:' and 'AI:' tag"""
 
             )
             

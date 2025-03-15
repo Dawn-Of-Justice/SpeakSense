@@ -8,7 +8,7 @@ import os
 from transformers import WhisperProcessor, WhisperForConditionalGeneration
 
 class WhisperRealtimeTranscriber:
-    def __init__(self, model_name="openai/whisper-medium", device=None):
+    def __init__(self, model_name="openai/whisper-tiny", device=None):
         # Set device to CUDA if available
         self.device = device if device else ("cuda" if torch.cuda.is_available() else "cpu")
         print(f"Using device: {self.device}")
@@ -119,14 +119,14 @@ class WhisperRealtimeTranscriber:
         buffer_duration = len(self.audio_buffer) / self.sample_rate
         
         # Clear screen and show transcription
-        os.system('cls' if os.name == 'nt' else 'clear')
-        print("Whisper Real-time Transcription")
-        print("-" * 50)
-        print(f"Audio duration: {buffer_duration:.1f}s | Processing time: {elapsed:.1f}s")
-        print("-" * 50)
-        print(transcription)
-        print("-" * 50)
-        print("Press Ctrl+C to stop")
+        # os.system('cls' if os.name == 'nt' else 'clear')
+        # print("Whisper Real-time Transcription")
+        # print("-" * 50)
+        # print(f"Audio duration: {buffer_duration:.1f}s | Processing time: {elapsed:.1f}s")
+        # print("-" * 50)
+        # print(transcription)
+        # print("-" * 50)
+        # print("Press Ctrl+C to stop")
         with open("transcription.txt", "a") as f:
             f.write(transcription+"->")
         
@@ -139,7 +139,7 @@ class WhisperRealtimeTranscriber:
             # Keep the most recent 2 seconds to maintain context
             self.audio_buffer = self.audio_buffer[-int(self.sample_rate * 2):]
             
-        self.last_transcription = transcription
+        self.last_transcription += transcription
     
     def start_transcribing(self):
         """Start the transcription process"""
@@ -171,6 +171,7 @@ def main():
         # Keep running until Ctrl+C
         print("Press Ctrl+C to stop transcription")
         while True:
+            print(transcriber.last_transcription)
             time.sleep(0.1)
             
     except KeyboardInterrupt:

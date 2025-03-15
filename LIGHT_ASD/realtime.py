@@ -14,7 +14,7 @@ import math
 # To run seperatley uncomment the below import Salo and Rahul
 # from model.faceDetector.s3fd import S3FD
 # from ASD import ASD
- 
+#  make the same changes in Model.py, ASD.py
 # And comment this
 from .model.faceDetector.s3fd import S3FD
 from .ASD import ASD
@@ -322,7 +322,7 @@ def main(run_sub_audio_thread=True):
                     # Draw rectangle and ID
                     color = (0, 0, 255)  # Default color (red)
                     shared_state = False
-                    if tracked_faces[face_id]['speaking_score'] > 0.5:
+                    if tracked_faces[face_id]['speaking_score'] > 0.0: # previously it was 0.5
                         color = (0, 255, 0)  # Green for speaking
                         shared_state = True
                         

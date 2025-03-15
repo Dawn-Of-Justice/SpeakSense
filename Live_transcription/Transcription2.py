@@ -166,7 +166,7 @@ def main():
         while True:
             if transcription is not None:
                 with open("Transcript.txt", "a") as f:
-                    f.write(transcription+"--")
+                    f.write(transcription+" ")
             time.sleep(1)
             
     except KeyboardInterrupt:
