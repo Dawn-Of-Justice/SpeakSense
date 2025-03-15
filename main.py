@@ -2,7 +2,6 @@ import threading
 import time
 import queue
 import traceback
-from Live_transcription.OnlineTranscription import RealtimeTranscriber
 from Live_transcription.Transcription import WhisperRealtimeTranscriber
 from audio_model.Classifier import AddressClassifier
 from LLM import AI
@@ -168,7 +167,6 @@ def generate_response(prompt_text):
             clear_state = True
             transcribed_stuff = None  # Reset transcribed content after speaking
             
-
 def asd_thread():
     """Runs the Active Speaker Detection in a separate thread"""
     try:
