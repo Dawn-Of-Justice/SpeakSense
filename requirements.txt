@@ -13,4 +13,3 @@ tensorflow
 scipy
 ollama
 torchvision
-pandas
