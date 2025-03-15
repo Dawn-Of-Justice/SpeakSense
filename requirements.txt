@@ -3,4 +3,14 @@ tqdm
 requests
 kaggle 
 gdown
-
+torch
+pydub
+pyaudio
+groq
+transformers
+pytorch_lightning
+tensorflow
+scipy
+ollama
+torchvision
+pandas
