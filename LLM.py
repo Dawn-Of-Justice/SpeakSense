@@ -2,7 +2,7 @@ import os
 from groq import Groq
 
 class AI:
-    def __init__(self, api_key="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", output_dir="groq_outputs"):
+    def __init__(self, api_key="api_key", output_dir="groq_outputs"):
         """
         Initialize the GroqGenerator with API key and output directory
         
