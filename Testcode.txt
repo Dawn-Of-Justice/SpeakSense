@@ -1,0 +1,24 @@
+from groq import Groq
+
+client = Groq()
+completion = client.chat.completions.create(
+    model="llama-3.3-70b-versatile",
+    messages=[
+        {
+            "role": "system",
+            "content": "You are an AI assistant tasked with generating synthetic training data for an addressing classifier model. This model will determine whether speech is addressed to an AI assistant or not, replacing traditional wake word detection. \n\nYour task is to generate realistic speech samples that might occur in real-time conversations, including:\n1. Complete sentences (some addressed to AI, some not)\n2. Cut-off or incomplete sentences\n3. Short addressing phrases\n4. Sentences with occasional transcription errors or hallucinated words\n\nEach generated sample should be clearly follow the format\n\nADDRESSING SAMPLES should include:\n- Questions or statements clearly directed at an AI assistant\n- Phrases that seek information, opinions, or actions from the AI\n- Direct addresses that may or may not include \"hey\", \"hi\", or similar greetings\n- May include cut-off beginnings or endings as would occur in real-time transcription\n\nNOT ADDRESSING SAMPLES should include:\n- People talking to each other, not to the AI\n- Statements or questions that are part of a human-to-human conversation\n- Ambient speech not directed at any particular entity\n- May include cut-off beginnings or endings as would occur in real-time transcription\n\nFORMAT:\nSample1: [generated text sample]\nSample2: [generated text sample]\nSample3: [generated text sample]\n...\n\nEXAMPLES:\n\nADDRESSING:\n- Hey what's the weather going to be like tomorrow\n- The HR department is looking to update the employee handbook Could you help by compiling all the necessary information and drafting the new version of the handbook It would be great if you could also gather feedback from the employees to ensure the handbook is comprehensive and useful\n- I was reading about the future of AI in the workplace Do you think AI will replace human jobs\n- What do you think about the latest movie releases\n- Tell me about the history of artificial intelligence\n- Do you know how to make a good pasta sauce\n\nNOT ADDRESSING:\n- Ive been learning more about photography lately and its fascinating how a single photo can tell a whole story Ive been experimenting with different angles and lighting and its exciting to see how the same scene can look so different based on how you capture it\n-My sister called me yesterday to tell me about her new job She started working at a tech company and shes excited about the opportunities there She mentioned they have a great team and are developing some innovative software\n- Its been a while since we visited the museum I remember the last time we went we spent hours looking at the art exhibits Maybe we should plan a visit for this weekend Ive been wanting to see the new Picasso collection they just acquired\n- so you're doing this and yeah maybe if its done\n- I really enjoyed that book you recommended last week\n- My car needs to be taken in for service soon\n- C.C.C.C C.C.C.C C.C.C.C blurble\n\nADDITIONAL INSTRUCTIONS:\n- Include some samples with cut-off text (e.g., \"so you're doing this and yeah maybe if its done\")\n- Include some short addressing phrases (e.g., \"Hey\", \"Hi there\", \"Excuse me\")\n- Include some samples with nonsensical or hallucinated words (e.g., \"C.C.C.C\", \"blurble\")\n- Create a mix of formal and informal language styles\n- Include samples from various topics (technology, entertainment, daily life, etc.)\n- Ensure a balanced distribution of addressing and non-addressing samples"
+        },
+        {
+            "role": "user",
+            "content": "Generate 20 samples of Non Addressing mostly cut off parts of conversation"
+        }
+    ],
+    temperature=1,
+    max_completion_tokens=1024,
+    top_p=1,
+    stream=True,
+    stop=None,
+)
+
+for chunk in completion:
+    print(chunk.choices[0].delta.content or "", end="")
