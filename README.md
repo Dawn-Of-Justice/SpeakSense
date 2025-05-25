@@ -1,6 +1,8 @@
 # SpeakSense
 SpeakSense is a multimodal deep learning project that detects when a user is speaking to a virtual assistant by analyzing both audio and video in real time without the use of wakeword.
 
+**See it in action**
+
 [![SpeakSense Live Demo](https://img.youtube.com/vi/AkITdNIybIM/0.jpg)](https://youtu.be/AkITdNIybIM)
 
 <img src="./assets/workflow.svg" alt="SpeakSense Workflow" width="50%">
