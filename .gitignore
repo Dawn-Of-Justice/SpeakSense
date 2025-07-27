@@ -1,8 +1,41 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# dependencies
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
 /speaksenseenv
-/audio_model/distilbert-speaksense/
+
+# Dependencies
 /node_modules
 /.pnp
 .pnp.*
@@ -12,32 +45,86 @@
 !.yarn/releases
 !.yarn/versions
 
-# testing
+# Testing
 /coverage
 
-# next.js
+# Next.js
 /.next/
 /out/
 
-# production
+# Production
 /build
 
-# misc
+# Misc
 .DS_Store
 *.pem
 
-# debug
+# Debug
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# Env files (can opt-in for committing if needed)
 .env*
+!.env.example
+!.env.local.example
 
-# vercel
+# Vercel
 .vercel
 
-# typescript
+# TypeScript
 *.tsbuildinfo
 next-env.d.ts
+
+# Model files and large data files
+*.ckpt
+*.h5
+*.pickle
+*.wav
+*.mp4
+*.avi
+*.mov
+/audio_model/distilbert-speaksense/
+
+# Data directories
+/data/raw/*.wav
+/data/raw/*.mp4
+/data/processed/outputs/
+/models/trained/*.ckpt
+/models/weights/*.h5
+
+# Logs
+*.log
+speaksense*.log
+transcription.txt
+
+# Temporary files
+temp*
+*.tmp
+tempCodeRunnerFile.py
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Operating System
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Model specific directories
+/backend/src/models/*/PreprocessOutput/
+/backend/src/models/*/VideoFolder/
+/backend/src/models/*/weight/*.pt
+/backend/src/models/*/weight/*.pth
