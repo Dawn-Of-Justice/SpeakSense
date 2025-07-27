@@ -4,8 +4,10 @@ uvicorn[standard]==0.32.1
 websockets==14.1
 
 # ML and AI dependencies
+--index-url https://download.pytorch.org/whl/cu118
 torch
 torchvision
+torchaudio
 transformers
 pytorch_lightning
 tensorflow
@@ -83,3 +85,4 @@ urllib3==2.3.0
 pyttsx3
 spacy
 playsound
+tf-keras

@@ -63,16 +63,19 @@ class AddressClassifierPt:
             import os
             
             # Convert backslashes to forward slashes for cross-platform compatibility
-            model_name = "audio_model/distilbert-speaksense/checkpoint-3306"
             
+            # model_name = "audio_model/distilbert-speaksense/checkpoint-3306"
+            model_name = r"C:\Users\Rohit Francis\Documents\GitHub\SpeakSense\audio_model\distilbert-speaksense\checkpoint-3306"
             # Check if the model exists locally
             model_dir = Path(model_name)
+            print(f"Does audio model dir exists model_dir.exists():{model_dir.exists()}")
             if model_dir.exists():
                 self.classifier = pipeline("text-classification", model=str(model_dir), tokenizer=str(model_dir))
                 self.model_available = True
                 print(f"✅ Address classifier loaded from {model_dir}")
             else:
                 print(f"⚠️ Audio model not found at {model_dir}. Using fallback classifier.")
+                assert "Audio model not found"
                 self.classifier = None
                 self.model_available = False
         except Exception as e:
