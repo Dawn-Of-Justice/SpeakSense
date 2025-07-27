@@ -11,13 +11,13 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from contextlib import asynccontextmanager
-from ..services.transcription.Transcription3 import WhisperRealtimeTranscriber
-# from ..models.audio.Classifier import AddressClassifier
-from ..models.audio.Classifier import AddressClassifierPt
-from ..services.LLM import AI
+from services.transcription.Transcription3 import WhisperRealtimeTranscriber
+# from models.audio.Classifier import AddressClassifier
+from models.audio.Classifier import AddressClassifierPt
+from services.LLM import AI
 import pyttsx3
-from ..models.asd.realtime3 import main as asd_main
-import ..models.asd.realtime3 as asd_module
+from models.asd.realtime3 import main as asd_main
+from models.asd import realtime3 as asd_module
 import playsound
 import spacy
 import os

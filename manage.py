@@ -85,8 +85,8 @@ def start_backend():
         python_cmd = "venv/bin/python"
     
     try:
-        # Use the simple server for now
-        subprocess.run([python_cmd, "simple_server.py"])
+        # Use the new server runner
+        subprocess.run([python_cmd, "run_server.py"])
     except KeyboardInterrupt:
         print("\n🛑 Backend server stopped")
     finally:

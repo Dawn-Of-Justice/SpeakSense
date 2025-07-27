@@ -10,6 +10,7 @@ import time
 import python_speech_features
 import torch
 import math
+from pathlib import Path
 from model.faceDetector.s3fd import S3FD
 from ASD import ASD
 
@@ -21,8 +22,10 @@ print(f"Using device: {device}")
 
 # ASD Model
 asd_model = ASD(device=device)
-model_path = "LIGHT_ASD/weight/finetuning_TalkSet.model"
-asd_model.loadParameters(model_path)
+# Get the absolute path to the model file
+current_dir = Path(__file__).parent
+model_path = current_dir / "weight" / "finetuning_TalkSet.model"
+asd_model.loadParameters(str(model_path))
 asd_model.eval()  # Set model to evaluation mode
 print(f"Model loaded from {model_path}")
 

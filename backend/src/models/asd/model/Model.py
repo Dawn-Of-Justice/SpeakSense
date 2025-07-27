@@ -1,13 +1,11 @@
 import torch
 import torch.nn as nn
 
-from LIGHT_ASD.model.Classifier import BGRU
-from LIGHT_ASD.model.Encoder import visual_encoder, audio_encoder
+from .Classifier import BGRU
+from .Encoder import visual_encoder, audio_encoder
 
-# from model.Classifier import BGRU
-# from model.Encoder import visual_encoder, audio_encoder
-
-# from model.Classifier import BGRU
+# from LIGHT_ASD.model.Classifier import BGRU
+# from LIGHT_ASD.model.Encoder import visual_encoder, audio_encoder
 # from model.Encoder import visual_encoder, audio_encoder
 # from Classifier import BGRU
 # from Encoder import visual_encoder, audio_encoder

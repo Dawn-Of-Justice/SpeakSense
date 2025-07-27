@@ -56,11 +56,30 @@ class AddressClassifier:
 
 
 class AddressClassifierPt:
-    r'audio_model\robot_addressing_classifier_new.h5'
     def __init__(self, model_path=r"audio_model\best_model.ckpt"):
-        # device = torch.device('cpu')
-        # Load the model from checkpoint
-        self.classifier = pipeline("text-classification", model=r"audio_model\distilbert-speaksense\checkpoint-1652", tokenizer=r"audio_model\distilbert-speaksense\checkpoint-1652")
+        try:
+            # Attempt to load the model from checkpoint
+            from pathlib import Path
+            import os
+            
+            # Convert backslashes to forward slashes for cross-platform compatibility
+            model_name = "audio_model/distilbert-speaksense/checkpoint-1652"
+            
+            # Check if the model exists locally
+            model_dir = Path(model_name)
+            if model_dir.exists():
+                self.classifier = pipeline("text-classification", model=str(model_dir), tokenizer=str(model_dir))
+                self.model_available = True
+                print(f"✅ Address classifier loaded from {model_dir}")
+            else:
+                print(f"⚠️ Audio model not found at {model_dir}. Using fallback classifier.")
+                self.classifier = None
+                self.model_available = False
+        except Exception as e:
+            print(f"⚠️ Failed to load audio classifier: {e}")
+            print("   Using fallback classifier that considers all input as addressing the robot.")
+            self.classifier = None
+            self.model_available = False
 
     def classify_text(self, text, max_sequence_length=100):
         """
@@ -73,16 +92,27 @@ class AddressClassifierPt:
         Returns:
             Dictionary with prediction results
         """
-        output = self.classifier(text)
+        if self.model_available and self.classifier:
+            try:
+                output = self.classifier(text)
+                
+                # Return result
+                is_addressing_robot = (output[0]['label'] == "LABEL_0")
+                
+                return {
+                    'text': text,
+                    'is_addressing_robot': is_addressing_robot,
+                    'confidence': output[0]['score']
+                }
+            except Exception as e:
+                print(f"⚠️ Error during classification: {e}")
+                # Fall through to fallback
         
-        # Return result
-        is_addressing_robot = (output[0]['label'] == "LABEL_0")
-        
+        # Fallback: assume all text is addressing the robot with moderate confidence
         return {
             'text': text,
-            'is_addressing_robot': is_addressing_robot,
-            # 'confidence': float(max(prediction_prob, 1 - prediction_prob))
-            "confidence": output[0]['score']
+            'is_addressing_robot': True,
+            'confidence': 0.7  # Moderate confidence for fallback
         }
 
 

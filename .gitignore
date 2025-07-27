@@ -130,3 +130,4 @@ Thumbs.db
 /backend/src/models/*/weight/*.pth
 
 node_modules/
+.next

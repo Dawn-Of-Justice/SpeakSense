@@ -2,7 +2,7 @@ import os
 from groq import Groq
 from dotenv import load_dotenv
 
-loaddotenv()
+load_dotenv()
 
 class AI:
     def __init__(self, api_key=os.environ['GROQ_API_KEY'], output_dir="groq_outputs"):
