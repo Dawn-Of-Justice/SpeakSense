@@ -116,19 +116,21 @@ def transcription_thread():
             transcribed_stuff = transcriber.last_transcription
             print(f"📝 Transcription: {transcribed_stuff}")
             
-            # Send to WebSocket clients
+            # Send to WebSocket clients using thread-safe approach
             if websocket_clients:
-                # Use thread-safe async call
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
                 try:
-                    loop.run_until_complete(broadcast_to_clients({
-                        "type": "transcription",
-                        "text": transcribed_stuff,
-                        "timestamp": time.time()
-                    }))
-                finally:
-                    loop.close()
+                    # Get the main event loop and schedule the coroutine
+                    loop = asyncio.get_event_loop()
+                    asyncio.run_coroutine_threadsafe(
+                        broadcast_to_clients({
+                            "type": "transcription",
+                            "text": transcribed_stuff,
+                            "timestamp": time.time()
+                        }),
+                        loop
+                    )
+                except RuntimeError:
+                    print(f"Could not send transcription via WebSocket: {transcribed_stuff}")
         
         time.sleep(0.5)
 
@@ -151,17 +153,18 @@ def addressing_thread():
                 
                 # Send response to WebSocket clients  
                 if websocket_clients:
-                    # Use asyncio.run_coroutine_threadsafe for thread-safe async call
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
                     try:
-                        loop.run_until_complete(broadcast_to_clients({
-                            "type": "ai_response", 
-                            "text": response,
-                            "timestamp": time.time()
-                        }))
-                    finally:
-                        loop.close()
+                        loop = asyncio.get_event_loop()
+                        asyncio.run_coroutine_threadsafe(
+                            broadcast_to_clients({
+                                "type": "ai_response", 
+                                "text": response,
+                                "timestamp": time.time()
+                            }),
+                            loop
+                        )
+                    except RuntimeError:
+                        print("Could not send AI response via WebSocket")
                 
                 # Reset state
                 time.sleep(2)  # Simulate speaking time

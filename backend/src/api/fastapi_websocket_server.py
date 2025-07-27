@@ -44,8 +44,11 @@ def remove_non_english_text(response):
 transcription_queue = queue.Queue()
 response_queue = queue.Queue()
 video_frame_queue = queue.Queue()  # Add video frame queue
+websocket_broadcast_queue = None  # Will be initialized as asyncio.Queue in lifespan
 clear_state = False
 transcribed_stuff = None
+last_sent_transcription = None  # Track last sent transcription to avoid duplicates
+last_transcription_time = 0  # Track when last transcription was sent
 ai_is_speaking = False
 transcription_active = False  # Control transcription
 system_started = False  # Control overall system
@@ -69,29 +72,44 @@ def remove_websocket_client(websocket):
 
 def broadcast_to_clients(message):
     """Send message to all connected WebSocket clients"""
-    with websocket_lock:
-        disconnected_clients = []
-        for client in websocket_clients:
-            try:
-                # Use asyncio.run_coroutine_threadsafe for thread safety
-                if hasattr(asyncio, '_get_running_loop'):
+    # Put message in async queue to be processed by the WebSocket handler
+    if websocket_broadcast_queue is not None:
+        try:
+            # Use put_nowait to avoid blocking the calling thread
+            websocket_broadcast_queue.put_nowait(message)
+        except asyncio.QueueFull:
+            print(f"WebSocket queue full, dropping message: {message.get('type', 'unknown')}")
+    else:
+        print(f"WebSocket queue not initialized, dropping message: {message.get('type', 'unknown')}")
+
+async def websocket_message_processor():
+    """Background task to process WebSocket messages from the queue"""
+    while True:
+        try:
+            # Wait for messages from the queue
+            message = await websocket_broadcast_queue.get()
+            
+            # Send to all connected clients
+            with websocket_lock:
+                disconnected_clients = []
+                for client in websocket_clients:
                     try:
-                        loop = asyncio.get_running_loop()
-                        asyncio.run_coroutine_threadsafe(
-                            client.send_text(json.dumps(message)), loop
-                        )
-                    except RuntimeError:
-                        # No running loop, create a new one
-                        asyncio.run(client.send_text(json.dumps(message)))
-                else:
-                    asyncio.run(client.send_text(json.dumps(message)))
-            except Exception as e:
-                print(f"WebSocket send error: {e}")
-                disconnected_clients.append(client)
-        
-        # Remove disconnected clients
-        for client in disconnected_clients:
-            websocket_clients.remove(client)
+                        await client.send_text(json.dumps(message))
+                    except Exception as e:
+                        print(f"WebSocket send error: {e}")
+                        disconnected_clients.append(client)
+                
+                # Remove disconnected clients
+                for client in disconnected_clients:
+                    if client in websocket_clients:
+                        websocket_clients.remove(client)
+            
+            # Mark task as done
+            websocket_broadcast_queue.task_done()
+            
+        except Exception as e:
+            print(f"WebSocket message processor error: {e}")
+            await asyncio.sleep(0.1)
 
 def video_frame_callback(frame):
     """Callback function to receive video frames from ASD"""
@@ -119,7 +137,7 @@ def video_streaming_thread():
                         "data": frame_data,
                         "timestamp": time.time()
                     }
-                    threading.Thread(target=broadcast_to_clients, args=(message,)).start()
+                    broadcast_to_clients(message)
                     
             time.sleep(0.033)  # ~30 FPS
         except Exception as e:
@@ -128,18 +146,22 @@ def video_streaming_thread():
 
 def transcription_thread():
     """Handles real-time transcription and puts results in a queue"""
-    global clear_state, transcribed_stuff, ai_is_speaking, transcription_active
+    global clear_state, transcribed_stuff, ai_is_speaking, transcription_active, last_sent_transcription, last_transcription_time
     
     transcriber = WhisperRealtimeTranscriber()
+    last_processed_length = 0  # Track how much of the transcription we've already processed
     
     try:
         # Wait for activation
+        print("Transcription thread waiting for activation...")
         while not transcription_active:
             time.sleep(0.1)
             
+        print("Transcription thread activated! Starting transcriber...")
         # Start listening and transcribing
         transcriber.start_listening()
         transcriber.start_transcribing()
+        print("Transcriber started successfully!")
         
         # Keep running until stopped
         while transcription_active:
@@ -148,21 +170,70 @@ def transcription_thread():
                 if not ai_is_speaking:
                     if clear_state:
                         transcriber.last_transcription = ""
+                        last_sent_transcription = None  # Reset last sent transcription
+                        last_transcription_time = 0
+                        last_processed_length = 0  # Reset processed length
                         clear_state = False
-                    if transcriber.last_transcription:
-                        hallucinated_words = ["See you next time", "!", "Thank you for watching", "thank you", "?"]
-                        for word in hallucinated_words:
-                            if word in transcriber.last_transcription:
-                                transcriber.last_transcription = transcriber.last_transcription.replace(word, "")
-                        transcribed_stuff = transcriber.last_transcription
+                        print("Cleared transcription state")
+                    
+                    # Check if there's a new transcription
+                    if hasattr(transcriber, 'last_transcription') and transcriber.last_transcription:
+                        current_transcription = transcriber.last_transcription
+                        current_length = len(current_transcription)
                         
-                        # Send transcription to WebSocket clients
-                        if websocket_clients:
-                            threading.Thread(target=broadcast_to_clients, args=({
-                                "type": "transcription",
-                                "text": transcribed_stuff,
-                                "timestamp": time.time()
-                            },)).start()
+                        # Check if there's new content since last processing
+                        if current_length > last_processed_length:
+                            new_content = current_transcription[last_processed_length:]
+                            print(f"Raw transcription received: '{current_transcription}'")
+                            print(f"New content: '{new_content}'")
+                            
+                            # Remove hallucinated words from the full transcription
+                            hallucinated_words = ["See you next time", "!", "Thank you for watching", "thank you", "?"]
+                            cleaned_transcription = current_transcription
+                            for word in hallucinated_words:
+                                if word in cleaned_transcription:
+                                    cleaned_transcription = cleaned_transcription.replace(word, "")
+                            
+                            transcribed_stuff = cleaned_transcription
+                            current_time = time.time()
+                            
+                            # Send if there's meaningful new content
+                            should_send = False
+                            
+                            if last_sent_transcription is None:
+                                # First transcription
+                                should_send = True
+                                print("First transcription - will send")
+                            elif cleaned_transcription != last_sent_transcription:
+                                # Text has changed
+                                should_send = True
+                                print("Transcription changed - will send")
+                            elif current_time - last_transcription_time > 3.0:
+                                # Force send after 3 seconds (user might be continuing)
+                                should_send = True
+                                print("Force sending after 3 seconds")
+                            
+                            if should_send and websocket_clients:
+                                broadcast_to_clients({
+                                    "type": "transcription",
+                                    "text": transcribed_stuff,
+                                    "timestamp": current_time
+                                })
+                                last_sent_transcription = transcribed_stuff
+                                last_transcription_time = current_time
+                                last_processed_length = current_length
+                                print(f"✅ Sent transcription: '{transcribed_stuff}'")
+                            elif transcribed_stuff:
+                                print(f"⏭️  Skipped duplicate transcription: '{transcribed_stuff}'")
+                        else:
+                            # Print periodically to show the thread is running
+                            if int(time.time()) % 5 == 0:
+                                print("Transcription thread running, waiting for new audio...")
+                    else:
+                        # Print periodically to show the thread is running
+                        if int(time.time()) % 10 == 0:
+                            print("Transcription thread running, waiting for audio...")
+                            
                 time.sleep(0.1)
             
     except KeyboardInterrupt:
@@ -204,11 +275,11 @@ def addressing_thread():
                 
                 # Send ASD status to WebSocket clients
                 if websocket_clients:
-                    threading.Thread(target=broadcast_to_clients, args=({
+                    broadcast_to_clients({
                         "type": "addressing_status", 
                         "is_addressing": current_shared_state,
                         "timestamp": time.time()
-                    },)).start()
+                    })
                 
                 if current_shared_state:  # Check if speaker is looking at camera/active
                     try:
@@ -245,11 +316,11 @@ def generate_response(prompt_text):
         
         # Send AI speaking status to WebSocket clients
         if websocket_clients:
-            threading.Thread(target=broadcast_to_clients, args=({
+            broadcast_to_clients({
                 "type": "ai_speaking",
                 "is_speaking": True,
                 "timestamp": time.time()
-            },)).start()
+            })
 
         response = chat.generate_response(
             prompt=f"Input: {prompt_text}", 
@@ -259,11 +330,11 @@ def generate_response(prompt_text):
 
         # Send AI response to WebSocket clients
         if websocket_clients:
-            threading.Thread(target=broadcast_to_clients, args=({
+            broadcast_to_clients({
                 "type": "ai_response",
                 "text": cleaned_response,
                 "timestamp": time.time()
-            },)).start()
+            })
 
         engine = pyttsx3.init()
         engine.setProperty("rate", 140)
@@ -283,11 +354,11 @@ def generate_response(prompt_text):
             
         # Send AI speaking status to WebSocket clients
         if websocket_clients:
-            threading.Thread(target=broadcast_to_clients, args=({
+            broadcast_to_clients({
                 "type": "ai_speaking",
                 "is_speaking": False,
                 "timestamp": time.time()
-            },)).start()
+            })
 
 def asd_thread():
     """Runs the Active Speaker Detection in a separate thread"""
@@ -308,6 +379,11 @@ def asd_thread():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global websocket_broadcast_queue
+    
+    # Initialize the async queue
+    websocket_broadcast_queue = asyncio.Queue(maxsize=100)
+    
     # Startup code
     asd = threading.Thread(target=asd_thread)
     transcription = threading.Thread(target=transcription_thread)
@@ -318,6 +394,9 @@ async def lifespan(app: FastAPI):
     addressing.daemon = True
     video_streaming.daemon = True
     
+    # Start the WebSocket message processor as a background task
+    websocket_task = asyncio.create_task(websocket_message_processor())
+    
     asd.start()
     time.sleep(1)
     transcription.start() 
@@ -325,7 +404,13 @@ async def lifespan(app: FastAPI):
     video_streaming.start()
     
     yield
-    # Shutdown code (if needed)
+    
+    # Shutdown code
+    websocket_task.cancel()
+    try:
+        await websocket_task
+    except asyncio.CancelledError:
+        pass
 
 # Update app creation
 app = FastAPI(lifespan=lifespan)
@@ -371,7 +456,9 @@ from contextlib import asynccontextmanager
 async def websocket_endpoint(websocket: WebSocket):
     global transcription_active, system_started
     
+    print(f"🔌 WebSocket connection attempt from {websocket.client}")
     await websocket.accept()
+    print(f"✅ WebSocket connection accepted from {websocket.client}")
     add_websocket_client(websocket)
     
     try:
