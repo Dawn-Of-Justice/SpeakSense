@@ -69,7 +69,11 @@ def setup_frontend():
     
     os.chdir("frontend")
     
-    run_command("npm install", "Installing Node.js dependencies")
+    # Use shell=True for Windows compatibility with npm
+    if os.name == 'nt':  # Windows
+        run_command("npm install", "Installing Node.js dependencies")
+    else:  # Unix/Linux/macOS
+        run_command(["npm", "install"], "Installing Node.js dependencies")
     
     os.chdir("..")
     print("✅ Frontend setup completed")
@@ -98,7 +102,11 @@ def start_frontend():
     os.chdir("frontend")
     
     try:
-        subprocess.run(["npm", "run", "dev"])
+        # Use shell=True for Windows compatibility with npm
+        if os.name == 'nt':  # Windows
+            subprocess.run("npm run dev", shell=True)
+        else:  # Unix/Linux/macOS
+            subprocess.run(["npm", "run", "dev"])
     except KeyboardInterrupt:
         print("\n🛑 Frontend server stopped")
     finally:
