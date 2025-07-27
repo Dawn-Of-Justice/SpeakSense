@@ -38,70 +38,107 @@ def setup_backend():
     """Set up the backend environment"""
     print("🔧 Setting up backend...")
     
-    os.chdir("backend")
+    # Store original directory
+    original_dir = os.getcwd()
+    backend_dir = Path("backend").resolve()
     
-    # Create virtual environment if it doesn't exist
-    if not Path("venv").exists():
+    try:
+        os.chdir(backend_dir)
+        
+        # Remove existing venv if it's incomplete and recreate
+        venv_path = Path("venv")
+        if venv_path.exists():
+            import shutil
+            print("🗑️ Removing incomplete virtual environment...")
+            shutil.rmtree(venv_path)
+        
+        # Create virtual environment
         run_command([sys.executable, "-m", "venv", "venv"], "Creating virtual environment")
+        
+        # Verify virtual environment was created properly
+        if os.name == 'nt':  # Windows
+            pip_executable = venv_path / "Scripts" / "pip.exe"
+            python_executable = venv_path / "Scripts" / "python.exe"
+        else:  # Unix/Linux/macOS
+            pip_executable = venv_path / "bin" / "pip"
+            python_executable = venv_path / "bin" / "python"
+        
+        if not pip_executable.exists():
+            raise Exception(f"Virtual environment creation failed - {pip_executable} not found")
+        
+        # Install requirements
+        run_command([str(pip_executable), "install", "-r", "requirements.txt"], "Installing Python dependencies")
+        run_command([str(python_executable), "-m", "spacy", "download", "en_core_web_sm"], "Downloading spaCy model")
+        
+        # Create necessary directories
+        dirs = ["logs", "data/temp"]
+        for dir_path in dirs:
+            Path(dir_path).mkdir(parents=True, exist_ok=True)
+        
+    finally:
+        os.chdir(original_dir)
     
-    # Install requirements
-    if os.name == 'nt':  # Windows
-        pip_cmd = "venv\\Scripts\\pip install -r requirements.txt"
-        python_cmd = "venv\\Scripts\\python"
-    else:  # Unix/Linux/macOS
-        pip_cmd = "venv/bin/pip install -r requirements.txt"
-        python_cmd = "venv/bin/python"
-    
-    run_command(pip_cmd, "Installing Python dependencies")
-    run_command(f"{python_cmd} -m spacy download en_core_web_sm", "Downloading spaCy model")
-    
-    # Create necessary directories
-    dirs = ["logs", "data/temp"]
-    for dir_path in dirs:
-        Path(dir_path).mkdir(parents=True, exist_ok=True)
-    
-    os.chdir("..")
     print("✅ Backend setup completed")
 
 def setup_frontend():
     """Set up the frontend environment"""
     print("🔧 Setting up frontend...")
     
-    os.chdir("frontend")
+    # Store original directory
+    original_dir = os.getcwd()
+    frontend_dir = Path("frontend").resolve()
     
-    # Use shell=True for Windows compatibility with npm
-    if os.name == 'nt':  # Windows
-        run_command("npm install", "Installing Node.js dependencies")
-    else:  # Unix/Linux/macOS
-        run_command(["npm", "install"], "Installing Node.js dependencies")
+    try:
+        os.chdir(frontend_dir)
+        
+        # Use shell=True for Windows compatibility with npm
+        if os.name == 'nt':  # Windows
+            run_command("npm install", "Installing Node.js dependencies")
+        else:  # Unix/Linux/macOS
+            run_command(["npm", "install"], "Installing Node.js dependencies")
+    finally:
+        os.chdir(original_dir)
     
-    os.chdir("..")
     print("✅ Frontend setup completed")
 
 def start_backend():
     """Start the backend server"""
     print("🚀 Starting backend server...")
-    os.chdir("backend")
     
-    if os.name == 'nt':  # Windows
-        python_cmd = "venv\\Scripts\\python"
-    else:  # Unix/Linux/macOS
-        python_cmd = "venv/bin/python"
+    # Store original directory
+    original_dir = os.getcwd()
+    backend_dir = Path("backend").resolve()
     
     try:
+        os.chdir(backend_dir)
+        
+        if os.name == 'nt':  # Windows
+            python_executable = Path("venv") / "Scripts" / "python.exe"
+        else:  # Unix/Linux/macOS
+            python_executable = Path("venv") / "bin" / "python"
+        
+        if not python_executable.exists():
+            print("❌ Virtual environment not found. Please run: python manage.py --setup-backend")
+            return
+        
         # Use the new server runner
-        subprocess.run([python_cmd, "run_server.py"])
+        subprocess.run([str(python_executable), "run_server.py"])
     except KeyboardInterrupt:
         print("\n🛑 Backend server stopped")
     finally:
-        os.chdir("..")
+        os.chdir(original_dir)
 
 def start_frontend():
     """Start the frontend development server"""
     print("🚀 Starting frontend development server...")
-    os.chdir("frontend")
+    
+    # Store original directory
+    original_dir = os.getcwd()
+    frontend_dir = Path("frontend").resolve()
     
     try:
+        os.chdir(frontend_dir)
+        
         # Use shell=True for Windows compatibility with npm
         if os.name == 'nt':  # Windows
             subprocess.run("npm run dev", shell=True)
@@ -110,7 +147,7 @@ def start_frontend():
     except KeyboardInterrupt:
         print("\n🛑 Frontend server stopped")
     finally:
-        os.chdir("..")
+        os.chdir(original_dir)
 
 def docker_setup():
     """Set up and run with Docker"""
