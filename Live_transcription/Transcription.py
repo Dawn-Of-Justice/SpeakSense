@@ -106,12 +106,16 @@ class WhisperRealtimeTranscriber:
             sampling_rate=self.sample_rate, 
             return_tensors="pt"
         ).input_features.to(self.device)
-        
+        # Create an empty decoder input with just the start token
+        # decoder_input_ids = torch.tensor([[self.processor.tokenizer.get_decoder_start_token_id()]]).to(self.device)
+
         # Generate token ids
         with torch.no_grad():
             predicted_ids = self.model.generate(input_features, max_length=448)
-        
+            # predicted_ids = self.model.generate(input_features, max_length=448, no_speech_threshold=0.6, logprob_threshold=-1.0)
+            
         # Decode ids to text
+        # print("got here")
         transcription = self.processor.batch_decode(predicted_ids, skip_special_tokens=True)[0]
         
         # Measure and display transcription time

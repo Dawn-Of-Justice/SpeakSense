@@ -111,8 +111,8 @@ class WhisperRealtimeTranscriber:
         elapsed = time.time() - start_time
         buffer_duration = len(self.audio_buffer) / self.sample_rate
         
-        with open("transcription.txt", "a") as f:
-            f.write(transcription + "->")
+        with open("transcription.txt", "a", encoding="utf-8") as f:
+            f.write(transcription)
         
         # Reset buffer if significant silence detected
         if self.silence_counter >= self.max_silence_chunks:
