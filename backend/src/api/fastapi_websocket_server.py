@@ -47,6 +47,8 @@ video_frame_queue = queue.Queue()  # Add video frame queue
 clear_state = False
 transcribed_stuff = None
 ai_is_speaking = False
+transcription_active = False  # Control transcription
+system_started = False  # Control overall system
 
 # Initialize AI components
 chat = AI()
@@ -126,17 +128,21 @@ def video_streaming_thread():
 
 def transcription_thread():
     """Handles real-time transcription and puts results in a queue"""
-    global clear_state, transcribed_stuff, ai_is_speaking
+    global clear_state, transcribed_stuff, ai_is_speaking, transcription_active
     
     transcriber = WhisperRealtimeTranscriber()
     
     try:
+        # Wait for activation
+        while not transcription_active:
+            time.sleep(0.1)
+            
         # Start listening and transcribing
         transcriber.start_listening()
         transcriber.start_transcribing()
         
-        # Keep running until Ctrl+C
-        while True:
+        # Keep running until stopped
+        while transcription_active:
             with lock:
                 # Only process transcription when AI is not speaking
                 if not ai_is_speaking:
@@ -166,8 +172,12 @@ def transcription_thread():
 
 def addressing_thread():
     """Processes transcriptions and determines if AI should respond"""
-    global clear_state, transcribed_stuff
+    global clear_state, transcribed_stuff, system_started
     try:
+        # Wait for system to start
+        while not system_started:
+            time.sleep(0.1)
+            
         classifier = AddressClassifierPt()
         
         context = ""
@@ -175,6 +185,10 @@ def addressing_thread():
         process_interval = 0.2  # Process context every 200ms
         
         while True:
+            if not system_started:
+                time.sleep(0.1)
+                continue
+                
             if transcribed_stuff:
                 context = transcribed_stuff
             
@@ -191,8 +205,8 @@ def addressing_thread():
                 # Send ASD status to WebSocket clients
                 if websocket_clients:
                     threading.Thread(target=broadcast_to_clients, args=({
-                        "type": "asd_status",
-                        "active": current_shared_state,
+                        "type": "addressing_status", 
+                        "is_addressing": current_shared_state,
                         "timestamp": time.time()
                     },)).start()
                 
@@ -233,7 +247,7 @@ def generate_response(prompt_text):
         if websocket_clients:
             threading.Thread(target=broadcast_to_clients, args=({
                 "type": "ai_speaking",
-                "speaking": True,
+                "is_speaking": True,
                 "timestamp": time.time()
             },)).start()
 
@@ -271,7 +285,7 @@ def generate_response(prompt_text):
         if websocket_clients:
             threading.Thread(target=broadcast_to_clients, args=({
                 "type": "ai_speaking",
-                "speaking": False,
+                "is_speaking": False,
                 "timestamp": time.time()
             },)).start()
 
@@ -355,6 +369,8 @@ from contextlib import asynccontextmanager
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    global transcription_active, system_started
+    
     await websocket.accept()
     add_websocket_client(websocket)
     
@@ -365,8 +381,17 @@ async def websocket_endpoint(websocket: WebSocket):
                 message = await websocket.receive_text()
                 # Echo back any received messages for testing
                 data = json.loads(message)
+                
                 if data.get("type") == "ping":
                     await websocket.send_text(json.dumps({"type": "pong"}))
+                elif data.get("type") == "start_transcription":
+                    transcription_active = True
+                    system_started = True
+                    print("Transcription started via frontend")
+                elif data.get("type") == "stop_transcription":
+                    transcription_active = False
+                    print("Transcription stopped via frontend")
+                    
             except WebSocketDisconnect:
                 break
             except Exception as e:
@@ -386,6 +411,8 @@ async def status():
     return {
         "clients": len(websocket_clients),
         "ai_speaking": ai_is_speaking,
+        "transcription_active": transcription_active,
+        "system_started": system_started,
         "asd_active": getattr(asd_module, 'shared_state', False)
     }
 
