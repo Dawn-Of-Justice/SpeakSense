@@ -60,7 +60,7 @@ class AddressClassifierPt:
     def __init__(self, model_path=r"audio_model\best_model.ckpt"):
         # device = torch.device('cpu')
         # Load the model from checkpoint
-        self.classifier = pipeline("text-classification", model=r"audio_model\distilbert-speaksense\checkpoint-800", tokenizer=r"audio_model\distilbert-speaksense\checkpoint-1200")
+        self.classifier = pipeline("text-classification", model=r"audio_model\distilbert-speaksense\checkpoint-1652", tokenizer=r"audio_model\distilbert-speaksense\checkpoint-1652")
 
     def classify_text(self, text, max_sequence_length=100):
         """

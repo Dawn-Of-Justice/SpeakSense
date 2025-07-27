@@ -10,7 +10,7 @@ import importlib
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
-
+from contextlib import asynccontextmanager
 from Live_transcription.Transcription3 import WhisperRealtimeTranscriber
 # from audio_model.Classifier import AddressClassifier
 from audio_model.Classifier import AddressClassifierPt
@@ -20,6 +20,10 @@ import LIGHT_ASD.realtime3 as asd_module
 from LIGHT_ASD.realtime3 import main as asd_main
 import playsound
 import spacy
+import os
+
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+
 
 nlp = spacy.blank("en")  # Load English tokenizer
 
@@ -57,12 +61,20 @@ def broadcast_to_clients(message):
         disconnected_clients = []
         for client in websocket_clients:
             try:
-                # Use asyncio to send message in a thread-safe way
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                loop.run_until_complete(client.send_text(json.dumps(message)))
-                loop.close()
-            except:
+                # Use asyncio.run_coroutine_threadsafe for thread safety
+                if hasattr(asyncio, '_get_running_loop'):
+                    try:
+                        loop = asyncio.get_running_loop()
+                        asyncio.run_coroutine_threadsafe(
+                            client.send_text(json.dumps(message)), loop
+                        )
+                    except RuntimeError:
+                        # No running loop, create a new one
+                        asyncio.run(client.send_text(json.dumps(message)))
+                else:
+                    asyncio.run(client.send_text(json.dumps(message)))
+            except Exception as e:
+                print(f"WebSocket send error: {e}")
                 disconnected_clients.append(client)
         
         # Remove disconnected clients
@@ -148,7 +160,7 @@ def addressing_thread():
                             print(f"Transcribed Context: {context}")
                             with lock:
                                 generate_response(context)
-                        print(f"")
+                        # print(f"")
                                 
                     except Exception as e:
                         print(f"Error in classification: {e}")
@@ -223,12 +235,46 @@ def generate_response(prompt_text):
 def asd_thread():
     """Runs the Active Speaker Detection in a separate thread"""
     try:
+        # Set device before running ASD
+        import torch
+        if torch.cuda.is_available():
+            device = torch.device('cuda')
+        else:
+            device = torch.device('cpu')
+        
+        # You might need to pass device to asd_main if it accepts it
         asd_main(run_sub_audio_thread=True)
     except Exception as e:
         print(f"ASD thread error: {e}")
+        traceback.print_exc()
 
-# Create FastAPI app
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup code
+    asd = threading.Thread(target=asd_thread)
+    transcription = threading.Thread(target=transcription_thread)
+    addressing = threading.Thread(target=addressing_thread)
+    
+    transcription.daemon = True
+    addressing.daemon = True
+    
+    asd.start()
+    time.sleep(1)
+    transcription.start() 
+    addressing.start()
+    
+    yield
+    # Shutdown code (if needed)
+
+# Update app creation
+app = FastAPI(lifespan=lifespan)
+
+
+
+
+# # Create FastAPI app
+# app = FastAPI()
 
 # Add CORS middleware
 app.add_middleware(
@@ -239,23 +285,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize background threads when FastAPI starts"""
-    # Create threads - exactly like original design
-    asd = threading.Thread(target=asd_thread)
-    transcription = threading.Thread(target=transcription_thread)
-    addressing = threading.Thread(target=addressing_thread)
+from contextlib import asynccontextmanager
+
+
+
+# @app.on_event("startup")
+# async def startup_event():
+#     """Initialize background threads when FastAPI starts"""
+#     # Create threads - exactly like original design
+#     asd = threading.Thread(target=asd_thread)
+#     transcription = threading.Thread(target=transcription_thread)
+#     addressing = threading.Thread(target=addressing_thread)
     
-    # Set as daemon threads so they exit when main program exits
-    transcription.daemon = True
-    addressing.daemon = True
+#     # Set as daemon threads so they exit when main program exits
+#     transcription.daemon = True
+#     addressing.daemon = True
     
-    # Start threads - exactly like original design
-    asd.start()
-    time.sleep(1)  # Give ASD thread time to initialize
-    transcription.start() 
-    addressing.start()
+#     # Start threads - exactly like original design
+#     asd.start()
+#     time.sleep(1)  # Give ASD thread time to initialize
+#     transcription.start() 
+#     addressing.start()
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
