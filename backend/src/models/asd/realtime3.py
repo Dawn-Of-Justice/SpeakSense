@@ -229,7 +229,7 @@ def record_audio(duration=2, sample_rate=16000):
         print(f"Audio recorded: {len(audio_data)} samples")
 
 
-def main(run_sub_audio_thread=True):
+def main(run_sub_audio_thread=True, video_callback=None):
     global shared_state
     
     # Initialize camera
@@ -350,17 +350,24 @@ def main(run_sub_audio_thread=True):
                     speaking_score = evaluate_speaker(audio_data, face_info['buffer'])
                     tracked_faces[face_id]['speaking_score'] = speaking_score
         
-        # Display frame
-        cv2.imshow("Active Speaker Detection", frame)
+        # Send frame to callback if provided (for streaming to frontend)
+        if video_callback:
+            try:
+                video_callback(frame)
+            except Exception as e:
+                print(f"Error in video callback: {e}")
+        
         count += 1
         
-        # Exit on 'q' key
-        if cv2.waitKey(1) == ord('q'):
-            break
+        # Small delay to control frame rate
+        time.sleep(0.033)  # ~30 FPS
+        
+        # Optional: Add a break condition for testing (you can remove this)
+        # if count > 1000:  # Stop after some frames for testing
+        #     break
     
     # Cleanup
     cam.release()
-    cv2.destroyAllWindows()
 
 if __name__ == "__main__":
     main()

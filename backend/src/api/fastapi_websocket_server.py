@@ -7,6 +7,15 @@ import queue
 import traceback
 import sys
 import importlib
+import base64
+import cv2
+from pathlib import Path
+
+# Add the src directory to Python path
+current_dir = Path(__file__).parent
+src_dir = current_dir.parent
+sys.path.insert(0, str(src_dir))
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
@@ -34,6 +43,7 @@ def remove_non_english_text(response):
 # Global variables - same as original design
 transcription_queue = queue.Queue()
 response_queue = queue.Queue()
+video_frame_queue = queue.Queue()  # Add video frame queue
 clear_state = False
 transcribed_stuff = None
 ai_is_speaking = False
@@ -80,6 +90,39 @@ def broadcast_to_clients(message):
         # Remove disconnected clients
         for client in disconnected_clients:
             websocket_clients.remove(client)
+
+def video_frame_callback(frame):
+    """Callback function to receive video frames from ASD"""
+    try:
+        # Encode frame as JPEG
+        _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        frame_base64 = base64.b64encode(buffer).decode('utf-8')
+        
+        # Put in queue for streaming
+        video_frame_queue.put(frame_base64)
+    except Exception as e:
+        print(f"Error in video frame callback: {e}")
+
+def video_streaming_thread():
+    """Thread to stream video frames to WebSocket clients"""
+    while True:
+        try:
+            if not video_frame_queue.empty():
+                frame_data = video_frame_queue.get()
+                
+                # Send to all connected clients
+                if websocket_clients:
+                    message = {
+                        "type": "video_frame",
+                        "data": frame_data,
+                        "timestamp": time.time()
+                    }
+                    threading.Thread(target=broadcast_to_clients, args=(message,)).start()
+                    
+            time.sleep(0.033)  # ~30 FPS
+        except Exception as e:
+            print(f"Video streaming thread error: {e}")
+            time.sleep(0.1)
 
 def transcription_thread():
     """Handles real-time transcription and puts results in a queue"""
@@ -242,8 +285,8 @@ def asd_thread():
         else:
             device = torch.device('cpu')
         
-        # You might need to pass device to asd_main if it accepts it
-        asd_main(run_sub_audio_thread=True)
+        # Pass the video callback to enable streaming
+        asd_main(run_sub_audio_thread=True, video_callback=video_frame_callback)
     except Exception as e:
         print(f"ASD thread error: {e}")
         traceback.print_exc()
@@ -255,14 +298,17 @@ async def lifespan(app: FastAPI):
     asd = threading.Thread(target=asd_thread)
     transcription = threading.Thread(target=transcription_thread)
     addressing = threading.Thread(target=addressing_thread)
+    video_streaming = threading.Thread(target=video_streaming_thread)
     
     transcription.daemon = True
     addressing.daemon = True
+    video_streaming.daemon = True
     
     asd.start()
     time.sleep(1)
     transcription.start() 
     addressing.start()
+    video_streaming.start()
     
     yield
     # Shutdown code (if needed)
