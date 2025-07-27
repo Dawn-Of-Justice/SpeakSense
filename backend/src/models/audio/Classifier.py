@@ -63,7 +63,7 @@ class AddressClassifierPt:
             import os
             
             # Convert backslashes to forward slashes for cross-platform compatibility
-            model_name = "audio_model/distilbert-speaksense/checkpoint-1652"
+            model_name = "audio_model/distilbert-speaksense/checkpoint-3306"
             
             # Check if the model exists locally
             model_dir = Path(model_name)
