@@ -4,15 +4,13 @@ import queue
 import traceback
 import sys
 import importlib
-# from Live_transcription.OnlineTranscription import RealtimeTranscriber
-# from Live_transcription.Transcription import WhisperRealtimeTranscriber
-from Live_transcription.Transcription3 import WhisperRealtimeTranscriber
-from audio_model.Classifier import AddressClassifier
-from LLM import AI
+from services.transcription.Transcription3 import WhisperRealtimeTranscriber
+from models.audio.Classifier import AddressClassifier
+from services.LLM import AI
 import pyttsx3
 # Import and then directly access the module to get up-to-date shared_state
-import LIGHT_ASD.realtime3 as asd_module
-from LIGHT_ASD.realtime3 import main as asd_main
+import models.asd.realtime3 as asd_module
+from models.asd.realtime3 import main as asd_main
 import playsound
 import spacy
 

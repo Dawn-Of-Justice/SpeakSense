@@ -128,3 +128,5 @@ Thumbs.db
 /backend/src/models/*/VideoFolder/
 /backend/src/models/*/weight/*.pt
 /backend/src/models/*/weight/*.pth
+
+node_modules/

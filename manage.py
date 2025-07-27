@@ -85,7 +85,8 @@ def start_backend():
         python_cmd = "venv/bin/python"
     
     try:
-        subprocess.run([python_cmd, "src/api/fastapi_websocket_server.py"])
+        # Use the simple server for now
+        subprocess.run([python_cmd, "simple_server.py"])
     except KeyboardInterrupt:
         print("\n🛑 Backend server stopped")
     finally:
