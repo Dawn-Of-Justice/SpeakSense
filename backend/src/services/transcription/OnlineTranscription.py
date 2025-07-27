@@ -10,7 +10,7 @@ from pydub import AudioSegment
 from io import BytesIO
 
 class RealtimeTranscriber:
-    def __init__(self, api_key="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", model="distil-whisper-large-v3-en", 
+    def __init__(self, api_key=None, model="distil-whisper-large-v3-en", 
                  prompt="", chunk_duration=3, sample_rate=16000, 
                  channels=1, format=pyaudio.paInt16):
         """
