@@ -1,36 +1,97 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SpeakSense
+SpeakSense is a multimodal deep learning project that detects when a user is speaking to a virtual assistant by analyzing both audio and video in real time without the use of wakeword.
 
-## Getting Started
+**See it in action** ⬇️
 
-First, run the development server:
+[![SpeakSense Live Demo](https://img.youtube.com/vi/AkITdNIybIM/0.jpg)](https://youtu.be/AkITdNIybIM)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+<img src="./assets/workflow.svg" alt="SpeakSense Workflow" width="50%">
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Phase 1: Data Collection & Preparation
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Collect multimodal training data
+- Record video, audio, and transcripts of people talking to and around the robot
+- Include diverse scenarios (directly addressing robot, talking nearby but not to robot)
+- Label data with "addressing robot" vs "not addressing robot" classifications
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Feature extraction pipeline
+- Implement the active speaker detection model (Liao et al.)
+- Set up basic visual feature extraction (gaze, orientation)
+- Configure audio preprocessing pipeline
+- Establish transcription service integration
 
-## Learn More
+## Phase 2: Initial Model Development
 
-To learn more about Next.js, take a look at the following resources:
+### Build baseline model
+- Implement a simple Bidirectional LSTM architecture
+- Create input pipelines for each modality
+- Design feature fusion mechanism
+- Develop training and evaluation scripts
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Basic training and validation
+- Train on clear-cut examples first
+- Implement cross-validation strategy
+- Establish baseline metrics for accuracy, latency, and resource usage
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Phase 3: Model Enhancement
 
-## Deploy on Vercel
+### Improve feature engineering
+- Refine visual features (add sustained gaze detection, orientation angles)
+- Enhance audio features (directivity, voice characteristics)
+- Develop linguistic feature extraction (pronoun detection, imperative forms)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Architectural improvements
+- Add attention mechanisms
+- Implement hierarchical structure for modality processing
+- Optimize layer configurations
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Advanced training techniques
+- Implement curriculum learning
+- Add data augmentation for edge cases
+- Fine-tune hyperparameters
+
+## Phase 4: System Integration
+
+### Develop real-time processing pipeline
+- Create efficient preprocessing modules
+- Implement sliding window for contextual memory
+- Design adaptive thresholding system
+
+### Optimize for low-end devices
+- Quantize model weights
+- Implement model pruning
+- Profile and optimize critical paths
+
+### Create staged activation system
+- Develop always-on lightweight monitoring
+- Build trigger mechanism for full model activation
+- Implement power management strategies
+
+## Phase 5: Testing & Refinement
+
+### Controlled environment testing
+- Measure accuracy metrics in controlled settings
+- Benchmark latency and resource usage
+- Identify common failure cases
+
+### Real-world testing
+- Deploy prototype in various environments
+- Collect user feedback on naturalism and responsiveness
+- Log false positives and false negatives
+
+### Model refinement
+- Retrain with additional edge cases
+- Fine-tune confidence thresholds
+- Optimize for specific deployment environments
+
+## Phase 6: Deployment & Learning
+
+### Full system deployment
+- Integrate with robot's main systems
+- Implement logging for continuous improvement
+- Develop update mechanism
+
+### Continuous learning
+- Add capability to learn from successful interactions
+- Implement personalization for specific users
+- Create feedback mechanism for misinterpretations
