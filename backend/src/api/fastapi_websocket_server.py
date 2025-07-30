@@ -228,8 +228,8 @@ def transcription_thread():
                         # Check if there's new content since last processing
                         if current_length > last_processed_length:
                             new_content = current_transcription[last_processed_length:]
-                            print(f"Raw transcription received: '{current_transcription}'")
-                            print(f"New content: '{new_content}'")
+                            # print(f"Raw transcription received: '{current_transcription}'")
+                            # print(f"New content: '{new_content}'")
                             
                             # Remove hallucinated words from the full transcription
                             hallucinated_words = ["See you next time", "!", "Thank you for watching", "thank you", "?"]
@@ -312,8 +312,8 @@ def addressing_thread():
             if current_time - last_processed > process_interval and context.strip():
                 # Directly access the module's shared_state for up-to-date value
                 current_shared_state = asd_module.shared_state
-                print(f"ASD Detection: {current_shared_state}")
-                print(f"Transcription: {context}")
+                # print(f"ASD Detection: {current_shared_state}")
+                # print(f"Transcription: {context}")
                 if current_shared_state is None:
                     current_shared_state = False
                 
@@ -380,15 +380,52 @@ def generate_response(prompt_text):
                 "timestamp": time.time()
             })
 
-        engine = pyttsx3.init()
-        engine.setProperty("rate", 140)
-        voices = engine.getProperty("voices")
-        engine.setProperty("voice", voices[1].id)
-        engine.save_to_file(cleaned_response, "sample.wav")
-        engine.runAndWait()
-        playsound.playsound("./sample.wav")
+        # Create unique filename to avoid conflicts
+        timestamp = int(time.time() * 1000)  # Use milliseconds for uniqueness
+        audio_file = f"sample_{timestamp}.wav"
+        
+        try:
+            # Initialize TTS engine
+            engine = pyttsx3.init()
+            engine.setProperty("rate", 140)
+            voices = engine.getProperty("voices")
+            if voices and len(voices) > 1:
+                engine.setProperty("voice", voices[1].id)
+            
+            # Save to unique file
+            engine.save_to_file(cleaned_response, audio_file)
+            engine.runAndWait()
+            
+            # Stop the engine to release resources
+            engine.stop()
+            del engine  # Explicitly delete the engine
+            
+            # Wait a moment for file to be ready
+            time.sleep(0.1)
+            
+            # Play the audio file
+            if os.path.exists(audio_file):
+                playsound.playsound(f"./{audio_file}")
+            else:
+                print(f"Audio file {audio_file} not found")
+                
+        except Exception as audio_error:
+            print(f"Audio playback error: {audio_error}")
+        finally:
+            # Clean up the audio file
+            try:
+                if os.path.exists(audio_file):
+                    # Wait a bit more before deletion to ensure file is not in use
+                    time.sleep(0.5)
+                    os.remove(audio_file)
+                    print(f"Cleaned up audio file: {audio_file}")
+            except Exception as cleanup_error:
+                print(f"Could not delete audio file {audio_file}: {cleanup_error}")
+                # Try to schedule deletion for later
+                threading.Timer(2.0, lambda: safe_delete_file(audio_file)).start()
         
         response_queue.put(cleaned_response)
+        
     finally:
         # Always reset flag when done speaking, even if there was an error
         with lock:
@@ -403,6 +440,21 @@ def generate_response(prompt_text):
                 "is_speaking": False,
                 "timestamp": time.time()
             })
+
+def safe_delete_file(filename):
+    """Safely delete a file with retries"""
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            if os.path.exists(filename):
+                os.remove(filename)
+                print(f"Delayed cleanup successful: {filename}")
+                return
+        except Exception as e:
+            if attempt == max_retries - 1:
+                print(f"Failed to delete {filename} after {max_retries} attempts: {e}")
+            else:
+                time.sleep(1)  # Wait before retry
 
 def asd_thread():
     """Runs the Active Speaker Detection in a separate thread"""
