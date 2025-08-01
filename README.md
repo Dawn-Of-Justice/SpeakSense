@@ -1,5 +1,4 @@
 # SpeakSense
-SpeakSense is a multimodal deep learning project that detects when a user is speaking to a virtual assistant by analyzing both audio and video in real time without the use of wakeword.
 
 **See it in action** ⬇️
 
@@ -7,7 +6,113 @@ SpeakSense is a multimodal deep learning project that detects when a user is spe
 
 <img src="./assets/workflow.svg" alt="SpeakSense Workflow" width="50%">
 
-## Phase 1: Data Collection & Preparation
+**See it in action** ⬇️
+
+[![SpeakSense Live Demo](https://img.youtube.com/vi/AkITdNIybIM/0.jpg)](https://youtu.be/AkITdNIybIM)
+
+<img src="./data/assets/workflow.svg" alt="SpeakSense Workflow" width="50%">
+
+## 🏗️ Project Structure
+
+```
+SpeakSense/
+├── backend/                    # Python backend services
+│   ├── src/
+│   │   ├── models/            # ML models (ASD, audio classification)
+│   │   ├── services/          # Core services (LLM, transcription)
+│   │   ├── api/               # FastAPI endpoints and WebSocket
+│   │   └── utils/             # Utility functions
+│   ├── tests/                 # Backend tests
+│   ├── requirements.txt       # Python dependencies
+│   └── setup.py              # Backend setup script
+├── frontend/                  # Next.js React frontend
+│   ├── app/                   # Next.js app directory
+│   ├── public/                # Static assets
+│   └── package.json           # Node.js dependencies
+├── models/                    # Trained model files and weights
+│   ├── trained/               # Trained model checkpoints
+│   └── weights/               # Model weight files
+├── data/                      # Data files and datasets
+│   ├── raw/                   # Raw audio/video data
+│   ├── processed/             # Processed features and outputs
+│   └── assets/                # Project assets (demos, diagrams)
+├── scripts/                   # Utility scripts and tools
+├── notebooks/                 # Jupyter notebooks for experiments
+├── docs/                      # Documentation and research papers
+└── config/                    # Configuration files
+```
+
+## 🚀 Quick Start
+
+### Option 1: Automated Setup
+```bash
+# Set up both backend and frontend
+python manage.py --setup
+
+# Start backend server
+python manage.py --start-backend
+
+# Start frontend server (in another terminal)
+python manage.py --start-frontend
+```
+
+### Option 2: Docker Setup
+```bash
+# Build and run with Docker Compose
+python manage.py --docker
+```
+
+### Option 3: Manual Setup
+
+#### Backend Setup
+
+1. Navigate to the backend directory:
+```bash
+cd backend
+```
+
+2. Run the setup script:
+```bash
+python setup.py
+```
+
+3. Start the backend server:
+```bash
+python src/api/fastapi_websocket_server.py
+```
+
+#### Frontend Setup
+
+1. Navigate to the frontend directory:
+```bash
+cd frontend
+```
+
+2. Install dependencies:
+```bash
+npm install
+```
+
+3. Start the development server:
+```bash
+npm run dev
+```
+
+### Access the Application
+- **Frontend**: http://localhost:3000
+- **Backend API**: http://localhost:8000
+- **API Documentation**: http://localhost:8000/docs
+
+## 🧠 How It Works
+
+SpeakSense uses a multimodal approach combining:
+
+- **Active Speaker Detection (ASD)**: Identifies who is speaking in video
+- **Audio Classification**: Determines if speech is directed at the assistant
+- **Visual Analysis**: Analyzes gaze direction and body language
+- **Natural Language Processing**: Understands speech intent and context
+
+## 📊 Phase 1: Data Collection & Preparation
 
 ### Collect multimodal training data
 - Record video, audio, and transcripts of people talking to and around the robot

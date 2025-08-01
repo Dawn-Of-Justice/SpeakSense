@@ -1,8 +1,11 @@
 import os
 from groq import Groq
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class AI:
-    def __init__(self, api_key="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", output_dir="groq_outputs"):
+    def __init__(self, api_key=os.environ['GROQ_API_KEY'], output_dir="groq_outputs"):
         """
         Initialize the GroqGenerator with API key and output directory
         
@@ -23,7 +26,7 @@ class AI:
             os.makedirs(output_dir)
             
         # Default model - can be changed via method
-        self.model = "qwen-2.5-32b"
+        self.model = "meta-llama/llama-4-scout-17b-16e-instruct"
         
     def generate_response(self, prompt, system_message=None, max_tokens=1000):
         """
