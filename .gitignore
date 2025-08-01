@@ -37,6 +37,8 @@ venv.bak/
 
 # Dependencies
 /node_modules
+/node_modules/.bin
+/node_modules/.package-lock.json
 /.pnp
 .pnp.*
 .yarn/*
