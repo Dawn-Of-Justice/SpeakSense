@@ -1,10 +1,5 @@
 # SpeakSense
 
-**See it in action** ⬇️
-
-[![SpeakSense Live Demo](https://img.youtube.com/vi/AkITdNIybIM/0.jpg)](https://youtu.be/AkITdNIybIM)
-
-<img src="./assets/workflow.svg" alt="SpeakSense Workflow" width="50%">
 
 **See it in action** ⬇️
 
