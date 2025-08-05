@@ -3,7 +3,7 @@
 
 **See it in action** ⬇️
 
-[![SpeakSense Live Demo](https://img.youtube.com/vi/AkITdNIybIM/0.jpg)](https://youtu.be/AkITdNIybIM)
+[![SpeakSense Live Demo](https://img.youtube.com/vi/b2W4UdL21sw/0.jpg)](https://youtu.be/b2W4UdL21sw)
 
 <img src="./data/assets/workflow.png" alt="SpeakSense Workflow" width="50%">
 
