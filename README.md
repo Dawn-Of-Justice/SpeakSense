@@ -5,7 +5,7 @@
 
 [![SpeakSense Live Demo](https://img.youtube.com/vi/AkITdNIybIM/0.jpg)](https://youtu.be/AkITdNIybIM)
 
-<img src="./data/assets/workflow.svg" alt="SpeakSense Workflow" width="50%">
+<img src="./data/assets/workflow.png" alt="SpeakSense Workflow" width="50%">
 
 ## 🏗️ Project Structure
 
