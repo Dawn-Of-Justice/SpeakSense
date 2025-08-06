@@ -1,5 +1,6 @@
 # SpeakSense
 
+The replacement for wakeword tech for robots, using multimodal AI to understand when people are addressing them. Basically ElevenLabs turn taking mechanism for robots but on steroids, cause it also uses visual cues like gaze and body language to determine if someone is talking to the robot or just nearby. Ideal for robots that need to be always listening but not always responding, like home assistants, social robots, and more.
 
 **See it in action** ⬇️
 
