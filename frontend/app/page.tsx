@@ -171,9 +171,9 @@ const AITranscriptionInterface = () => {
           className="text-center mb-8"
         >
           <h1 className="text-4xl font-bold text-white mb-2 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-            AI Transcription System
+            Multimodal Turn-Taking AI
           </h1>
-          <p className="text-slate-300">Real-time speech recognition with intelligent response generation</p>
+          <p className="text-slate-300">No More use of wakeword tech, just talk natural</p>
         </motion.div>
 
         {/* Main Content Grid */}
