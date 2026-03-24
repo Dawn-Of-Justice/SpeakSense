@@ -1,2 +1,2 @@
-transformers==4.47.1
+transformers==4.53.0
 PyAudio==0.2.14
